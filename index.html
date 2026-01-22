@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SIA-118 Profi-Quiz – Klick-App</title>
+  <style>
+    :root { --maxw: 980px; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: #0b0c10;
+      color: #e7e7ea;
+    }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(11,12,16,0.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: 16px; }
+    h1 { margin: 0; font-size: 18px; letter-spacing: 0.2px; }
+    .sub { opacity: 0.75; font-size: 13px; margin-top: 4px; }
+    main .wrap { padding-top: 18px; padding-bottom: 40px; }
+
+    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 860px) { .row { grid-template-columns: 1.2fr 0.8fr; } }
+
+    .card {
+      background: #12141c;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      padding: 14px;
+    }
+    .card h2 { margin: 0 0 8px; font-size: 16px; }
+    .meta {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      opacity: 0.8; font-size: 13px;
+      align-items: center;
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .progress {
+      height: 10px; border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      overflow: hidden; border: 1px solid rgba(255,255,255,0.08);
+    }
+    .bar { height: 100%; width: 0%; background: #7aa2ff; }
+
+    .qtext { margin: 12px 0 10px; line-height: 1.35; font-size: 16px; }
+    .opts { display: grid; gap: 10px; margin-top: 10px; }
+    .opt {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer;
+      transition: transform 0.05s ease, background 0.12s ease, border-color 0.12s ease;
+      user-select: none;
+    }
+    .opt:hover { background: rgba(255,255,255,0.06); }
+    .opt:active { transform: scale(0.995); }
+    .opt input { margin-top: 2px; }
+    .opt.correct { border-color: rgba(76, 217, 100, 0.55); background: rgba(76,217,100,0.10); }
+    .opt.wrong { border-color: rgba(255, 59, 48, 0.55); background: rgba(255,59,48,0.10); }
+    .opt.neutral { border-color: rgba(255,255,255,0.10); }
+    .opt .label { opacity: 0.85; font-weight: 600; min-width: 18px; }
+    .opt .txt { flex: 1; }
+
+    .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: #e7e7ea;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 650;
+      transition: background 0.12s ease, border-color 0.12s ease, transform 0.05s ease;
+    }
+    button:hover { background: rgba(255,255,255,0.09); }
+    button:active { transform: scale(0.995); }
+    button.primary { background: rgba(122,162,255,0.18); border-color: rgba(122,162,255,0.35); }
+    button.danger { background: rgba(255,59,48,0.12); border-color: rgba(255,59,48,0.35); }
+
+    .answerBox {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px dashed rgba(255,255,255,0.16);
+      display: none;
+    }
+    .answerBox strong { display: inline-block; margin-right: 8px; }
+    .muted { opacity: 0.75; }
+
+    .sideGrid { display: grid; gap: 12px; }
+    .kv { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+    .kv .k { opacity: 0.75; }
+    .kv .v { font-weight: 700; }
+    .small { font-size: 12px; opacity: 0.78; line-height: 1.35; }
+    .toggleRow { display: grid; gap: 10px; }
+    label.chk {
+      display: flex; gap: 10px; align-items: center;
+      padding: 10px 12px; border-radius: 12px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer;
+      user-select: none;
+    }
+    input[type="number"], select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: #e7e7ea;
+    }
+    a { color: #7aa2ff; text-decoration: none; }
+    .footerNote { margin-top: 14px; opacity: 0.7; font-size: 12px; }
+    .toast {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 18px;
+      background: rgba(20,22,30,0.96);
+      border: 1px solid rgba(255,255,255,0.10);
+      padding: 10px 12px;
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      font-size: 13px;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>SIA-118 Profi-Quiz – Klick-App</h1>
+    <div class="sub">Multiple Choice (1 richtig) · Senior + Expertenniveau · Antwort + Artikelangabe</div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="row">
+      <section class="card" aria-label="Quiz">
+        <div class="meta">
+          <span class="pill" id="pillIndex">Frage 1 / 40</span>
+          <span class="pill" id="pillSection">Teil 1</span>
+          <span class="pill" id="pillStatus">Status: offen</span>
+        </div>
+        <div class="progress" aria-label="Fortschritt">
+          <div class="bar" id="bar"></div>
+        </div>
+
+        <div class="qtext" id="qtext">…</div>
+
+        <div class="opts" id="opts"></div>
+
+        <div class="btns">
+          <button id="btnPrev">← Zurück</button>
+          <button class="primary" id="btnCheck">Antwort prüfen</button>
+          <button id="btnReveal">Lösung anzeigen</button>
+          <button class="primary" id="btnNext">Weiter →</button>
+          <button class="danger" id="btnReset">Reset</button>
+        </div>
+
+        <div class="answerBox" id="answerBox">
+          <div><strong>Richtig:</strong> <span id="ansCorrect"></span></div>
+          <div class="muted" style="margin-top:6px;"><strong>Artikel:</strong> <span id="ansArt"></span></div>
+        </div>
+
+        <div class="footerNote">
+          Tipp: Ergänze/ersetze die <code>QUESTIONS</code>-Liste unten (im HTML) – dann hast du deine vollen 200 Fragen in derselben App.
+        </div>
+      </section>
+
+      <aside class="sideGrid">
+        <section class="card" aria-label="Statistik">
+          <h2>Statistik</h2>
+          <div class="kv"><div class="k">Richtig</div><div class="v" id="statRight">0</div></div>
+          <div class="kv"><div class="k">Falsch</div><div class="v" id="statWrong">0</div></div>
+          <div class="kv"><div class="k">Offen</div><div class="v" id="statOpen">0</div></div>
+          <div class="kv"><div class="k">Quote</div><div class="v" id="statRate">0%</div></div>
+          <div class="small" style="margin-top:10px;">
+            Speicherung lokal im Browser (LocalStorage). Reset löscht den Fortschritt.
+          </div>
+        </section>
+
+        <section class="card" aria-label="Einstellungen">
+          <h2>Einstellungen</h2>
+          <div class="toggleRow">
+            <label class="chk">
+              <input type="checkbox" id="chkShuffle" />
+              <span>Reihenfolge mischen (Shuffle)</span>
+            </label>
+
+            <label class="chk">
+              <input type="checkbox" id="chkAutoNext" checked />
+              <span>Nach Prüfen automatisch weiter</span>
+            </label>
+
+            <div>
+              <div class="small" style="margin-bottom:6px;">Direkt zu Frage-Nr.</div>
+              <input type="number" id="jumpNum" min="1" value="1" />
+              <button style="width:100%; margin-top:10px;" id="btnJump">Springen</button>
+            </div>
+
+            <div>
+              <div class="small" style="margin-bottom:6px;">Filter</div>
+              <select id="filter">
+                <option value="all">Alle</option>
+                <option value="open">Nur offene</option>
+                <option value="wrong">Nur falsch</option>
+                <option value="right">Nur richtig</option>
+              </select>
+              <div class="small" style="margin-top:8px;">
+                Filter wirkt auf Navigation (Weiter/Zurück).
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-label="Hinweis">
+          <h2>Hinweis (professionell)</h2>
+          <div class="small">
+            Diese App ist absichtlich „hart": sie unterscheidet zwischen <em>Antwort gewählt</em> und
+            <em>Antwort geprüft</em>. So kannst du zuerst „committen“ und dann prüfen – wie im echten Alltag
+            (Nachtrag/Abnahme/Mängel).
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ====== QUIZ-DATEN ======
+  // Format: { id, part, question, options: {A,B,C,D}, correct: "A"|"B"|"C"|"D", article: "SIA 118 Art. ..." }
+  //
+  // Aktuell: 10 echte Fragen + 30 Platzhalter (11–40).
+  // Du kannst hier problemlos auf 200 erweitern.
+  const QUESTIONS_BASE = [
+    {
+      id: 1, part: "Teil 1",
+      question: "Wann gilt die SIA-Norm 118 als Bestandteil eines Werkvertrags?",
+      options: {
+        A: "Automatisch bei Bauwerken in der Schweiz",
+        B: "Nur bei öffentlichen Bauwerken",
+        C: "Nur bei ausdrücklicher oder stillschweigender Übernahme",
+        D: "Immer, sofern ein Leistungsverzeichnis vorliegt"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 1 (Übernahmeprinzip)"
+    },
+    {
+      id: 2, part: "Teil 1",
+      question: "Welche Aussage zur Rangordnung der Vertragsbestandteile ist korrekt?",
+      options: {
+        A: "SIA-Norm 118 geht immer allen anderen Unterlagen vor",
+        B: "Leistungsverzeichnis geht der Vertragsurkunde vor",
+        C: "Vertragsurkunde geht dem Leistungsverzeichnis vor",
+        D: "Baubeschreibung ist immer ranghöchstes Dokument"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 21"
+    },
+    {
+      id: 3, part: "Teil 1",
+      question: "Was ist der Hauptzweck der Rangordnung gemäss SIA 118?",
+      options: {
+        A: "Vermeidung von Nachträgen",
+        B: "Festlegung der Haftung",
+        C: "Auflösung von Widersprüchen",
+        D: "Beschleunigung der Abrechnung"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 21"
+    },
+    {
+      id: 4, part: "Teil 1",
+      question: "Welche Unterlage ist typischerweise nachrangig?",
+      options: {
+        A: "Vertragsurkunde",
+        B: "Leistungsverzeichnis",
+        C: "Baubeschreibung",
+        D: "Allgemeine Bedingungen Dritter"
+      },
+      correct: "D",
+      article: "SIA 118 Art. 21"
+    },
+    {
+      id: 5, part: "Teil 1",
+      question: "Wann liegt ein Werkvertrag im Sinne der SIA 118 vor?",
+      options: {
+        A: "Sobald Bauarbeiten ausgeführt werden",
+        B: "Bei Lieferung von Material",
+        C: "Bei Verpflichtung zur Herstellung eines Werkes",
+        D: "Bei jeder entgeltlichen Tätigkeit"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 2"
+    },
+    {
+      id: 6, part: "Teil 1",
+      question: "Welche Verträge fallen nicht unter die SIA-Norm 118?",
+      options: {
+        A: "Subunternehmerverträge",
+        B: "Bau-Werkverträge",
+        C: "Planerverträge",
+        D: "GU-Verträge"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 1"
+    },
+    {
+      id: 7, part: "Teil 1",
+      question: "Was gilt bei Widersprüchen zwischen Ausschreibungsunterlagen und Angebot?",
+      options: {
+        A: "Angebot geht immer vor",
+        B: "Ausschreibung geht immer vor",
+        C: "Massgebend ist die Vertragsurkunde",
+        D: "Bauleitung entscheidet"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 20–21"
+    },
+    {
+      id: 8, part: "Teil 1",
+      question: "Welche Pflicht trifft den Unternehmer bei erkennbaren Unklarheiten?",
+      options: {
+        A: "Schweigen",
+        B: "Nachkalkulation",
+        C: "Anzeige- und Abmahnungspflicht",
+        D: "Automatische Mehrvergütung"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 25"
+    },
+    {
+      id: 9, part: "Teil 1",
+      question: "Welche Aussage zur Treuepflicht ist korrekt?",
+      options: {
+        A: "Gilt nur für den Bauherrn",
+        B: "Gilt nur für die Bauleitung",
+        C: "Gilt beidseitig",
+        D: "Ist dispositiv ausgeschlossen"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 24"
+    },
+    {
+      id: 10, part: "Teil 1",
+      question: "Was ist kein typischer Bestandteil der Ausschreibungsunterlagen?",
+      options: {
+        A: "Leistungsverzeichnis",
+        B: "Baubeschreibung",
+        C: "Unternehmerkalkulation",
+        D: "Pläne"
+      },
+      correct: "C",
+      article: "SIA 118 Art. 7–10"
+    },
+  ];
+
+  // Platzhalter 11–40 (damit du direkt durchklicken kannst)
+  for (let i = 11; i <= 40; i++) {
+    QUESTIONS_BASE.push({
+      id: i,
+      part: "Teil 1",
+      question: `Platzhalterfrage ${i}: (ersetzen mit echter Senior/Expertenfrage)`,
+      options: {
+        A: "Option A",
+        B: "Option B",
+        C: "Option C",
+        D: "Option D"
+      },
+      correct: "A",
+      article: "SIA 118 Art. …"
+    });
+  }
+
+  // ====== STATE / STORAGE ======
+  const LS_KEY = "sia118_quiz_state_v1";
+
+  const defaultState = () => ({
+    order: QUESTIONS_BASE.map(q => q.id),
+    idx: 0,
+    selected: {}, // { [id]: "A"|"B"|"C"|"D" }
+    checked: {},  // { [id]: true }
+    result: {},   // { [id]: "right"|"wrong" }
+    shuffle: false,
+    autoNext: true,
+    filter: "all"
+  });
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return defaultState();
+      const st = JSON.parse(raw);
+      // minimal validation
+      if (!st || !Array.isArray(st.order) || typeof st.idx !== "number") return defaultState();
+      return { ...defaultState(), ...st };
+    } catch {
+      return defaultState();
+    }
+  }
+
+  function saveState() {
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  }
+
+  let state = loadState();
+
+  // ====== HELPERS ======
+  const byId = (id) => QUESTIONS_BASE.find(q => q.id === id);
+
+  function shuffled(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function toast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    setTimeout(() => el.classList.remove("show"), 1200);
+  }
+
+  function applyOrderIfNeeded() {
+    const base = QUESTIONS_BASE.map(q => q.id);
+
+    if (state.shuffle) {
+      // Keep already answered/checked progress but reorder.
+      state.order = shuffled(base);
+      state.idx = 0;
+    } else {
+      state.order = base;
+      state.idx = Math.min(state.idx, state.order.length - 1);
+    }
+  }
+
+  function getFilteredOrder() {
+    const ord = state.order.slice();
+    const f = state.filter;
+    if (f === "all") return ord;
+
+    return ord.filter(id => {
+      const isChecked = !!state.checked[id];
+      const res = state.result[id];
+      if (f === "open") return !isChecked;
+      if (f === "right") return isChecked && res === "right";
+      if (f === "wrong") return isChecked && res === "wrong";
+      return true;
+    });
+  }
+
+  function clampIndexToFiltered() {
+    const fOrd = getFilteredOrder();
+    if (fOrd.length === 0) {
+      // fallback: no match => show all
+      state.filter = "all";
+      document.getElementById("filter").value = "all";
+      toast("Filter hatte keine Treffer – zurück zu 'Alle'.");
+      return;
+    }
+    const currentId = state.order[state.idx];
+    const pos = fOrd.indexOf(currentId);
+    if (pos === -1) {
+      // move to first item in filtered list
+      const firstId = fOrd[0];
+      state.idx = state.order.indexOf(firstId);
+    }
+  }
+
+  // ====== RENDER ======
+  const els = {
+    pillIndex: document.getElementById("pillIndex"),
+    pillSection: document.getElementById("pillSection"),
+    pillStatus: document.getElementById("pillStatus"),
+    bar: document.getElementById("bar"),
+    qtext: document.getElementById("qtext"),
+    opts: document.getElementById("opts"),
+    answerBox: document.getElementById("answerBox"),
+    ansCorrect: document.getElementById("ansCorrect"),
+    ansArt: document.getElementById("ansArt"),
+    statRight: document.getElementById("statRight"),
+    statWrong: document.getElementById("statWrong"),
+    statOpen: document.getElementById("statOpen"),
+    statRate: document.getElementById("statRate"),
+    chkShuffle: document.getElementById("chkShuffle"),
+    chkAutoNext: document.getElementById("chkAutoNext"),
+    jumpNum: document.getElementById("jumpNum"),
+    filter: document.getElementById("filter"),
+  };
+
+  function computeStats() {
+    const total = QUESTIONS_BASE.length;
+    let right = 0, wrong = 0, open = 0;
+
+    for (const q of QUESTIONS_BASE) {
+      const id = q.id;
+      if (!state.checked[id]) { open++; continue; }
+      if (state.result[id] === "right") right++;
+      else if (state.result[id] === "wrong") wrong++;
+    }
+    const done = right + wrong;
+    const rate = done ? Math.round((right / done) * 100) : 0;
+
+    return { total, right, wrong, open, rate };
+  }
+
+  function setProgress() {
+    const { total } = computeStats();
+    const currentPos = state.idx + 1;
+    const pct = Math.round((currentPos / total) * 100);
+    els.bar.style.width = pct + "%";
+    els.pillIndex.textContent = `Frage ${currentPos} / ${total}`;
+  }
+
+  function render() {
+    clampIndexToFiltered();
+
+    const id = state.order[state.idx];
+    const q = byId(id);
+
+    els.pillSection.textContent = q.part || "—";
+
+    const isChecked = !!state.checked[id];
+    const res = state.result[id];
+    const status = !isChecked ? "offen" : (res === "right" ? "richtig" : "falsch");
+    els.pillStatus.textContent = `Status: ${status}`;
+
+    els.qtext.textContent = q.question;
+
+    // Options
+    els.opts.innerHTML = "";
+    const selected = state.selected[id] || null;
+
+    ("A,B,C,D".split(",")).forEach(letter => {
+      const opt = document.createElement("label");
+      opt.className = "opt neutral";
+
+      const inp = document.createElement("input");
+      inp.type = "radio";
+      inp.name = "opt";
+      inp.value = letter;
+      inp.checked = selected === letter;
+      inp.disabled = false;
+
+      inp.addEventListener("change", () => {
+        state.selected[id] = letter;
+        saveState();
+        render(); // reflect selection
+      });
+
+      const lab = document.createElement("div");
+      lab.className = "label";
+      lab.textContent = letter;
+
+      const txt = document.createElement("div");
+      txt.className = "txt";
+      txt.textContent = q.options[letter];
+
+      opt.appendChild(inp);
+      opt.appendChild(lab);
+      opt.appendChild(txt);
+
+      // If checked, color feedback:
+      if (isChecked) {
+        const correct = q.correct;
+        const picked = state.selected[id];
+        opt.classList.remove("neutral");
+        if (letter === correct) opt.classList.add("correct");
+        else if (picked === letter && letter !== correct) opt.classList.add("wrong");
+        else opt.classList.add("neutral");
+        inp.disabled = true;
+      }
+
+      els.opts.appendChild(opt);
+    });
+
+    // Answer box
+    if (els.answerBox.dataset.forceShow === "1") {
+      els.answerBox.style.display = "block";
+    } else {
+      els.answerBox.style.display = "none";
+    }
+    els.ansCorrect.textContent = `${q.correct}) ${q.options[q.correct]}`;
+    els.ansArt.textContent = q.article || "—";
+
+    // progress + stats
+    setProgress();
+
+    const s = computeStats();
+    els.statRight.textContent = s.right;
+    els.statWrong.textContent = s.wrong;
+    els.statOpen.textContent = s.open;
+    els.statRate.textContent = `${s.rate}%`;
+
+    // jump input
+    els.jumpNum.max = QUESTIONS_BASE.length;
+    els.jumpNum.value = (state.idx + 1).toString();
+
+    // toggles
+    els.chkShuffle.checked = !!state.shuffle;
+    els.chkAutoNext.checked = !!state.autoNext;
+    els.filter.value = state.filter;
+  }
+
+  // ====== NAVIGATION ======
+  function gotoIndex(newIdx) {
+    state.idx = Math.max(0, Math.min(newIdx, state.order.length - 1));
+    els.answerBox.dataset.forceShow = "0";
+    saveState();
+    render();
+  }
+
+  function gotoNext() {
+    const fOrd = getFilteredOrder();
+    const currentId = state.order[state.idx];
+    const pos = fOrd.indexOf(currentId);
+    const nextId = fOrd[pos + 1];
+
+    if (!nextId) { toast("Ende (Filter). "); return; }
+    const newIdx = state.order.indexOf(nextId);
+    gotoIndex(newIdx);
+  }
+
+  function gotoPrev() {
+    const fOrd = getFilteredOrder();
+    const currentId = state.order[state.idx];
+    const pos = fOrd.indexOf(currentId);
+    const prevId = fOrd[pos - 1];
+
+    if (!prevId) { toast("Start (Filter). "); return; }
+    const newIdx = state.order.indexOf(prevId);
+    gotoIndex(newIdx);
+  }
+
+  // ====== ACTIONS ======
+  function checkAnswer() {
+    const id = state.order[state.idx];
+    const q = byId(id);
+    const picked = state.selected[id];
+
+    if (!picked) { toast("Zuerst eine Antwort wählen."); return; }
+
+    const ok = (picked === q.correct);
+    state.checked[id] = true;
+    state.result[id] = ok ? "right" : "wrong";
+
+    saveState();
+    render();
+
+    toast(ok ? "Richtig." : "Falsch.");
+
+    if (state.autoNext) setTimeout(gotoNext, 250);
+  }
+
+  function revealAnswer() {
+    els.answerBox.dataset.forceShow = "1";
+    els.answerBox.style.display = "block";
+  }
+
+  function resetAll() {
+    if (!confirm("Wirklich alles zurücksetzen? (Fortschritt wird gelöscht)")) return;
+    localStorage.removeItem(LS_KEY);
+    state = defaultState();
+    applyOrderIfNeeded();
+    saveState();
+    els.answerBox.dataset.forceShow = "0";
+    render();
+  }
+
+  function jumpTo() {
+    const n = parseInt(els.jumpNum.value, 10);
+    if (!Number.isFinite(n) || n < 1 || n > state.order.length) {
+      toast("Ungültige Nummer.");
+      return;
+    }
+    gotoIndex(n - 1);
+  }
+
+  function setShuffle(on) {
+    state.shuffle = !!on;
+    applyOrderIfNeeded();
+    saveState();
+    toast(on ? "Shuffle an." : "Shuffle aus.");
+    render();
+  }
+
+  function setAutoNext(on) {
+    state.autoNext = !!on;
+    saveState();
+    toast(on ? "Auto-Weiter an." : "Auto-Weiter aus.");
+  }
+
+  function setFilter(val) {
+    state.filter = val;
+    clampIndexToFiltered();
+    saveState();
+    render();
+  }
+
+  // ====== WIRE UI ======
+  document.getElementById("btnPrev").addEventListener("click", gotoPrev);
+  document.getElementById("btnNext").addEventListener("click", gotoNext);
+  document.getElementById("btnCheck").addEventListener("click", checkAnswer);
+  document.getElementById("btnReveal").addEventListener("click", revealAnswer);
+  document.getElementById("btnReset").addEventListener("click", resetAll);
+  document.getElementById("btnJump").addEventListener("click", jumpTo);
+
+  els.chkShuffle.addEventListener("change", (e) => setShuffle(e.target.checked));
+  els.chkAutoNext.addEventListener("change", (e) => setAutoNext(e.target.checked));
+  els.filter.addEventListener("change", (e) => setFilter(e.target.value));
+
+  // Keyboard shortcuts
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") gotoNext();
+    if (e.key === "ArrowLeft") gotoPrev();
+    if (e.key.toLowerCase() === "enter") checkAnswer();
+    if (["a","b","c","d"].includes(e.key.toLowerCase())) {
+      const id = state.order[state.idx];
+      if (state.checked[id]) return;
+      const letter = e.key.toUpperCase();
+      state.selected[id] = letter;
+      saveState();
+      render();
+    }
+    if (e.key.toLowerCase() === "r") revealAnswer();
+  });
+
+  // Init
+  applyOrderIfNeeded();
+  saveState();
+  render();
+</script>
+</body>
+</html>
