@@ -55,7 +55,15 @@ function buildInitialState() {
     }
   });
   const nextId = photos.length ? Math.max(...photos.map((p) => p.id)) + 1 : 1;
-  return { photos, sectionMeta, nextId, version: 1, savedAt: new Date().toISOString() };
+  const meta = {
+    titel: 'Fotodokumentation',
+    firma: 'Schärli Architektur AG',
+    projektTitel: '1452.0 Neubau Wohnhaus Leumattstrasse 33, Luzern',
+    thema: 'Zustandsdokumentation Bestand / Umgebung vor Baubeginn',
+    datum: '3. – 16. August 2026',
+    aufgenommenDurch: 'meha',
+  };
+  return { photos, sectionMeta, nextId, meta, version: 1, savedAt: new Date().toISOString() };
 }
 
 async function readState() {
@@ -93,7 +101,7 @@ app.get('/api/state', checkAuth, async (req, res) => {
 
 app.post('/api/state', checkAuth, async (req, res) => {
   try {
-    const { photos, sectionMeta, nextId } = req.body || {};
+    const { photos, sectionMeta, nextId, meta } = req.body || {};
     if (!Array.isArray(photos) || !Array.isArray(sectionMeta)) {
       return res.status(400).json({ error: 'invalid_state' });
     }
@@ -101,6 +109,7 @@ app.post('/api/state', checkAuth, async (req, res) => {
       photos,
       sectionMeta,
       nextId: typeof nextId === 'number' ? nextId : 1,
+      meta: meta && typeof meta === 'object' ? meta : {},
       version: 1,
       savedAt: new Date().toISOString(),
     };

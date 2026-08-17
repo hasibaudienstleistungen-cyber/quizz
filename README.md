@@ -9,10 +9,15 @@ gespeichert** und ist von jedem Gerät über die Deploy-URL erreichbar.
 - Fotos per Drag & Drop sortieren und zwischen Kapiteln verschieben
 - Beschriftungen und Kapiteltitel bearbeiten
 - Kapitel hinzufügen/entfernen, Bilder entfernen/wiederherstellen
+- Kapitelbeschreibung je Kapitel (optional, erscheint im PDF)
+- **Dokumentkopf** bearbeiten (Titel, Firma, Projekt, Thema, Datum, Aufgenommen durch)
+- **PDF-Export** im Schärli-Stil: Kopfzeile, Metablock, Kapitel mit 2-spaltigem
+  Bildraster, durchlaufende Bildnummerierung und **automatische Seitenzahlen** in
+  der Fusszeile. Erzeugt vollständig im Browser (jsPDF, keine externen Dienste).
 - Neue Fotos hochladen (werden automatisch verkleinert, damit der Stand klein bleibt)
 - **Auto-Speichern**: Jede Änderung wird nach kurzer Zeit automatisch gespeichert
   (Status oben rechts: „Speichern…“ / „✓ Gespeichert“)
-- JSON-Export wie gehabt
+- JSON-Export als Backup
 - Optionaler Passwortschutz
 
 ## Wie der Stand gespeichert wird

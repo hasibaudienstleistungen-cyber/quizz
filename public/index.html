@@ -64,7 +64,8 @@
   <h1>Fotodokumentation – Bildauswahl</h1>
   <div class="sub">Leumattstrasse 33, Luzern — Bilder entfernen, Bildunterschriften anpassen, neue Fotos hinzufügen. Am Ende exportieren und im Chat schicken.</div>
   <div class="toolbar">
-    <button class="primary" id="exportBtn">📄 Auswahl exportieren</button>
+    <button class="primary" id="pdfBtn">📄 PDF exportieren</button>
+    <button id="exportBtn">JSON-Backup</button>
     <button id="addSectionBtn">➕ Neues Kapitel</button>
     <span class="count" id="countLabel"></span>
   </div>
@@ -97,6 +98,8 @@
   </div>
 </div>
 
+<script src="jspdf.umd.min.js"></script>
+<script src="app-doc.js"></script>
 <script>
 
 let photos = [];
@@ -104,6 +107,7 @@ let sectionMeta = [];
 let nextId = 1;
 let draggedId = null;
 let booted = false;
+let meta = {};
 
 function nextSectionNr() {
   return sectionMeta.length ? Math.max(...sectionMeta.map(s => s.nr)) + 1 : 1;
@@ -184,6 +188,14 @@ function render() {
     header.appendChild(delSecBtn);
 
     block.appendChild(header);
+
+    const descInput = document.createElement('input');
+    descInput.type = 'text';
+    descInput.placeholder = 'Kapitelbeschreibung (optional, erscheint im PDF)';
+    descInput.value = sec.beschreibung || '';
+    descInput.style.cssText = 'width:100%; margin:0 0 8px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; font:inherit; font-size:13px; color:var(--text);';
+    descInput.addEventListener('input', (e) => { sec.beschreibung = e.target.value; });
+    block.appendChild(descInput);
 
     // Drop-Ziel auf dem ganzen Kapitel-Block: sowohl bestehende Karten verschieben
     // als auch neue Dateien direkt vom Computer in dieses Kapitel ziehen
@@ -458,7 +470,7 @@ async function saveNow() {
     const res = await fetch('/api/state', {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ photos, sectionMeta, nextId })
+      body: JSON.stringify({ photos, sectionMeta, nextId, meta })
     });
     if (res.status === 401) { showLogin(); setSaveStatus('Anmeldung nötig', 'error'); return; }
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -521,7 +533,11 @@ async function boot() {
     photos = Array.isArray(data.photos) ? data.photos : [];
     sectionMeta = Array.isArray(data.sectionMeta) ? data.sectionMeta : [];
     nextId = data.nextId || (photos.length ? Math.max(...photos.map(p=>p.id)) + 1 : 1);
+    meta = Object.assign({}, (window.META_DEFAULTS || {}), data.meta || {});
     booted = true;
+    if (!document.getElementById('metaPanel')) {
+      document.getElementById('root').insertBefore(window.buildMetaPanel(meta, scheduleSave), document.getElementById('sections'));
+    }
     render();
     setSaveStatus('✓ Geladen', 'ok');
     // Auto-Speichern bei Text-Eingaben (Beschriftungen, Kapiteltitel)
@@ -531,6 +547,26 @@ async function boot() {
     console.error(e);
   }
 }
+
+async function exportPdf() {
+  const btn = document.getElementById('pdfBtn');
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ PDF wird erstellt…';
+  try {
+    const blob = await window.generateFotoPdf(meta, photos, sectionMeta);
+    const result = await window.deliverPdf(blob, window.pdfFilename(meta));
+    btn.textContent = (result === 'downloaded' || result === 'saved') ? '✓ PDF erstellt'
+      : (result === 'declined') ? label : '✓ PDF geöffnet';
+  } catch (e) {
+    console.error(e);
+    alert('PDF-Export fehlgeschlagen: ' + ((e && (e.message || e.code)) || e));
+    btn.textContent = '⚠ Fehler';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = label; }, 2500);
+  }
+}
+document.getElementById('pdfBtn').addEventListener('click', exportPdf);
 
 boot();
 </script>
