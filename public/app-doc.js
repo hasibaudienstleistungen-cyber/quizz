@@ -378,63 +378,106 @@
       return Promise.resolve('downloaded');
     }
 
-    // Artifact-Vorschau: Download-Fähigkeit versuchen, sonst eingebettete Ansicht
-    // mit „In neuem Tab öffnen" (dort steht der echte Download des PDF-Viewers).
+    // Artifact-Vorschau: erst echten Datei-Download versuchen; wird das Format
+    // abgelehnt, den PDF-Dialog anzeigen (öffnet das PDF in einem echten Tab).
     return window.claude.use('downloads').then(function (downloads) {
-      if (!downloads) { showPdfPreview(blob, filename, null); return 'preview'; }
+      if (!downloads) return openPdfDialog(blob, filename, null);
       return downloads.save({ filename: filename, data: blob })
         .then(function () { return 'saved'; })
         .catch(function (e) {
           if (e && e.code === 'declined') return 'declined';
-          showPdfPreview(blob, filename, downloads);
-          return 'preview';
+          return openPdfDialog(blob, filename, downloads);
         });
-    }).catch(function () { showPdfPreview(blob, filename, null); return 'preview'; });
+    }).catch(function () { return openPdfDialog(blob, filename, null); });
   };
 
-  function showPdfPreview(blob, filename, downloads) {
-    var url = URL.createObjectURL(blob);
-    var bg = document.createElement('div');
-    bg.className = 'modal-bg';
-    bg.style.display = 'flex';
-    var box = document.createElement('div');
-    box.className = 'modal';
-    box.style.cssText = 'max-width:900px; width:94vw; height:90vh; display:flex; flex-direction:column;';
+  function blobToDataURL(blob) {
+    return new Promise(function (resolve) {
+      var r = new FileReader();
+      r.onload = function () { resolve(r.result); };
+      r.onerror = function () { resolve(null); };
+      r.readAsDataURL(blob);
+    });
+  }
 
-    var bar = document.createElement('div');
-    bar.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;';
-    var h = document.createElement('h2');
-    h.style.cssText = 'margin:0; flex:1; font-size:17px;';
-    h.textContent = 'PDF – ' + filename;
-    var openBtn = document.createElement('button');
-    openBtn.className = 'primary';
-    openBtn.textContent = '⬇ In neuem Tab öffnen / speichern';
-    var closeBtn = document.createElement('button');
-    closeBtn.textContent = 'Schliessen';
-    bar.appendChild(h); bar.appendChild(openBtn); bar.appendChild(closeBtn);
-    box.appendChild(bar);
+  // Öffnet das fertige PDF in einem echten Browser-Tab (dort gibt es die native
+  // Download-/Druck-Funktion). Zusätzlich ein garantierter HTML-Fallback über die
+  // downloads-Fähigkeit, falls Popups blockiert sind.
+  function openPdfDialog(blob, filename, downloads) {
+    return blobToDataURL(blob).then(function (dataUri) {
+      var bg = document.createElement('div');
+      bg.className = 'modal-bg';
+      bg.style.display = 'flex';
+      var box = document.createElement('div');
+      box.className = 'modal';
+      box.style.cssText = 'max-width:520px;';
 
-    var note = document.createElement('p');
-    note.className = 'sub';
-    note.style.cssText = 'margin:0 0 8px;';
-    note.textContent = 'Tipp: „In neuem Tab öffnen / speichern" – dort mit dem Download-Symbol des PDF-Viewers als Datei sichern. In der installierten App wird direkt gespeichert.';
-    box.appendChild(note);
+      var h = document.createElement('h2');
+      h.style.marginTop = '0';
+      h.textContent = 'PDF ist fertig';
+      box.appendChild(h);
 
-    var frame = document.createElement('iframe');
-    frame.src = url;
-    frame.style.cssText = 'flex:1; width:100%; border:1px solid var(--border); border-radius:8px; background:#fff;';
-    box.appendChild(frame);
+      var p = document.createElement('p');
+      p.className = 'sub';
+      p.style.cssText = 'margin:0 0 4px;';
+      p.textContent = filename;
+      box.appendChild(p);
 
-    bg.appendChild(box);
-    document.body.appendChild(bg);
+      var p2 = document.createElement('p');
+      p2.className = 'sub';
+      p2.style.cssText = 'margin:6px 0 14px;';
+      p2.textContent = 'Öffnet das PDF in einem neuen Tab – dort mit dem Download-Symbol des PDF-Viewers als Datei speichern oder drucken.';
+      box.appendChild(p2);
 
-    function close() { bg.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1500); }
-    closeBtn.addEventListener('click', close);
-    bg.addEventListener('click', function (e) { if (e.target === bg) close(); });
-    openBtn.addEventListener('click', function () {
-      var w = null;
-      try { w = window.open(url, '_blank'); } catch (e) {}
-      if (!w && downloads) { downloads.save({ filename: filename, data: blob }).catch(function () {}); }
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;';
+      var openBtn = document.createElement('button');
+      openBtn.className = 'primary';
+      openBtn.textContent = '⬇ PDF in neuem Tab öffnen';
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = 'Schliessen';
+      row.appendChild(openBtn); row.appendChild(closeBtn);
+      box.appendChild(row);
+
+      var hint = document.createElement('div');
+      hint.style.cssText = 'color:var(--danger); font-size:12px; margin-top:10px; min-height:16px;';
+      box.appendChild(hint);
+
+      bg.appendChild(box);
+      document.body.appendChild(bg);
+      function close() { bg.remove(); }
+      closeBtn.addEventListener('click', close);
+      bg.addEventListener('click', function (e) { if (e.target === bg) close(); });
+
+      openBtn.addEventListener('click', function () {
+        var win = null;
+        try { win = window.open('', '_blank'); } catch (e) {}
+        if (win && win.document) {
+          try {
+            win.document.open();
+            win.document.write(
+              '<!doctype html><html><head><meta charset="utf-8"><title>' + filename + '</title>' +
+              '<style>html,body{margin:0;height:100%}embed,iframe{border:0;width:100%;height:100%}</style></head>' +
+              '<body><embed type="application/pdf" src="' + dataUri + '"></body></html>');
+            win.document.close();
+            hint.textContent = '';
+            return;
+          } catch (e) {}
+        }
+        // Popup blockiert: als HTML-Datei sichern (garantierter Weg), sonst Hinweis.
+        if (downloads) {
+          var htmlDoc =
+            '<!doctype html><html><head><meta charset="utf-8"><title>' + filename + '</title>' +
+            '<style>html,body{margin:0;height:100%}embed{border:0;width:100%;height:100%}</style></head>' +
+            '<body><embed type="application/pdf" src="' + dataUri + '"></body></html>';
+          downloads.save({ filename: filename.replace(/\.pdf$/i, '') + '.html', data: htmlDoc })
+            .then(function () { hint.style.color = 'var(--ok)'; hint.textContent = 'Als HTML-Datei gespeichert – im Browser öffnen und drucken/als PDF sichern.'; })
+            .catch(function () { hint.textContent = 'Popups sind blockiert. Bitte Popups für diese Seite erlauben – oder die installierte App für den direkten PDF-Download nutzen.'; });
+        } else {
+          hint.textContent = 'Popups sind blockiert. Bitte Popups für diese Seite erlauben – oder die installierte App für den direkten PDF-Download nutzen.';
+        }
+      });
+      return 'preview';
     });
   }
 })();
