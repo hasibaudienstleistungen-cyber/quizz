@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Fotodokumentation – Bildauswahl</title>
+<style>
+  :root {
+    --bg:#f7f7f5; --panel:#fff; --border:#e2e0db; --text:#2a2a28;
+    --muted:#8a8780; --accent:#8a6d3b; --accent-light:#f0e8d8;
+    --danger:#b3543f; --ok:#5c7a5c;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif; }
+  #root { padding:20px; max-width:1200px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:18px; }
+  .toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:18px; position:sticky; top:0; background:var(--bg); padding:10px 0; z-index:5; border-bottom:1px solid var(--border); }
+  button { font:inherit; cursor:pointer; border-radius:8px; border:1px solid var(--border); background:var(--panel); padding:8px 14px; color:var(--text); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:hover { filter:brightness(0.96); }
+  .count { font-size:13px; color:var(--muted); margin-left:auto; }
+  .section-block { margin-bottom:26px; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+  .section-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .section-header input[type=text] { font-weight:600; font-size:15px; border:none; background:transparent; padding:2px 4px; border-radius:4px; flex:1; }
+  .section-header input[type=text]:hover, .section-header input[type=text]:focus { background:var(--accent-light); outline:none; }
+  .sec-num { color:var(--muted); font-size:13px; white-space:nowrap; }
+  .section-header button { font-size:11px; padding:4px 8px; }
+  .section-block.removed { display:none; }
+  .section-block.drag-over-section { outline:2px dashed var(--accent); outline-offset:-4px; background:var(--accent-light); }
+  .empty-hint { color:var(--muted); font-size:12px; padding:10px 0; font-style:italic; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
+  .card { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#fff; cursor:grab; }
+  .card.dragging { opacity:0.4; }
+  .card.drag-over { outline:2px dashed var(--accent); outline-offset:-2px; }
+  .drag-handle { font-size:11px; color:var(--muted); padding:4px 8px 0; user-select:none; }
+  .card.removed { opacity:0.35; }
+  .card.new-card { border-color:var(--ok); border-width:2px; }
+  .card img { width:100%; height:140px; object-fit:cover; display:block; }
+  .card .body { padding:8px 10px; }
+  .bildlabel { font-size:11px; color:var(--muted); margin-bottom:3px; }
+  .badge { display:inline-block; font-size:10px; padding:1px 6px; border-radius:10px; background:var(--accent-light); color:var(--accent); margin-left:6px; }
+  .card textarea { width:100%; font:inherit; font-size:12px; border:1px solid transparent; border-radius:6px; padding:4px; resize:none; height:44px; background:transparent; }
+  .card textarea:hover, .card textarea:focus { background:var(--accent-light); border-color:var(--border); outline:none; }
+  .actions { display:flex; justify-content:space-between; align-items:center; padding:0 10px 8px; gap:6px; }
+  .card select { font-size:11px; border:1px solid var(--border); border-radius:6px; padding:2px 4px; background:#fff; max-width:110px; }
+  .icon-btn { border:none; background:none; font-size:12px; padding:4px 6px; cursor:pointer; color:var(--muted); white-space:nowrap; }
+  .icon-btn:hover { color:var(--danger); }
+  .icon-btn.restore { color:var(--ok); font-weight:bold; }
+  .drop-zone { border:2px dashed var(--border); border-radius:12px; padding:26px; text-align:center; color:var(--muted); margin-bottom:20px; background:var(--panel); cursor:pointer; }
+  .drop-zone.drag { border-color:var(--accent); background:var(--accent-light); }
+  .drop-zone input { display:none; }
+  textarea.export-box { width:100%; height:220px; font-family:ui-monospace,monospace; font-size:11px; border:1px solid var(--border); border-radius:8px; padding:10px; }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; z-index:50; }
+  .modal { background:#fff; border-radius:12px; padding:20px; max-width:640px; width:90%; max-height:80vh; overflow:auto; }
+  .modal h2 { margin-top:0; font-size:16px; }
+  .modal p { font-size:13px; color:var(--muted); }
+  .save-status.ok { color: var(--ok); }
+  .save-status.pending { color: var(--accent); }
+  .save-status.error { color: var(--danger); font-weight:600; }
+</style>
+</head>
+<body>
+<div id="root">
+  <h1>Fotodokumentation – Bildauswahl</h1>
+  <div class="sub">Leumattstrasse 33, Luzern — Bilder entfernen, Bildunterschriften anpassen, neue Fotos hinzufügen. Am Ende exportieren und im Chat schicken.</div>
+  <div class="toolbar">
+    <button class="primary" id="exportBtn">📄 Auswahl exportieren</button>
+    <button id="addSectionBtn">➕ Neues Kapitel</button>
+    <span class="count" id="countLabel"></span>
+  </div>
+  <div class="drop-zone" id="dropZone">
+    ➕ Neue Fotos hierher ziehen oder klicken zum Auswählen
+    <input type="file" id="fileInput" accept="image/*" multiple>
+  </div>
+  <div id="sections"></div>
+</div>
+
+<div class="modal-bg" id="modalBg" style="display:none;">
+  <div class="modal">
+    <h2>Auswahl exportieren</h2>
+    <p>Text kopieren und mir im Chat schicken — ich baue daraus das aktualisierte Word-Dokument. Neu hochgeladene Fotos bitte zusätzlich als Dateien im Chat mitschicken.</p>
+    <textarea class="export-box" id="exportBox" readonly></textarea>
+    <div style="margin-top:10px; display:flex; gap:8px;">
+      <button class="primary" id="copyBtn">📋 In Zwischenablage kopieren</button>
+      <button id="closeModalBtn">Schliessen</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="confirmBg" style="display:none;">
+  <div class="modal" style="max-width:420px;">
+    <h2 id="confirmText"></h2>
+    <div style="margin-top:14px; display:flex; gap:8px; justify-content:flex-end;">
+      <button id="confirmCancel">Abbrechen</button>
+      <button class="primary" id="confirmOk" style="background:var(--danger); border-color:var(--danger);">Entfernen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+let photos = [];
+let sectionMeta = [];
+let nextId = 1;
+let draggedId = null;
+let booted = false;
+
+function nextSectionNr() {
+  return sectionMeta.length ? Math.max(...sectionMeta.map(s => s.nr)) + 1 : 1;
+}
+
+function addSection() {
+  const nr = nextSectionNr();
+  sectionMeta.push({ nr, title: 'Neues Kapitel', removed: false });
+  render();
+}
+
+function removeSection(nr) {
+  const sec = sectionMeta.find(s => s.nr === nr);
+  if (!sec) return;
+  showConfirm(
+    `Kapitel "${sec.title}" inkl. aller enthaltenen Bilder entfernen?`,
+    () => {
+      sec.removed = true;
+      photos.forEach(p => { if (p.section === nr) p.removed = true; });
+      render();
+    }
+  );
+}
+
+function movePhoto(fromId, toId) {
+  const target = photos.find(p => p.id === toId);
+  const fromIdx = photos.findIndex(p => p.id === fromId);
+  if (fromIdx === -1 || !target) return;
+  const [moved] = photos.splice(fromIdx, 1);
+  moved.section = target.section; // ins Zielkapitel einsortieren
+  const toIdx = photos.findIndex(p => p.id === toId);
+  photos.splice(toIdx, 0, moved);
+}
+
+function showConfirm(text, onOk) {
+  document.getElementById('confirmText').textContent = text;
+  document.getElementById('confirmBg').style.display = 'flex';
+  const okBtn = document.getElementById('confirmOk');
+  const cancelBtn = document.getElementById('confirmCancel');
+  const cleanup = () => {
+    document.getElementById('confirmBg').style.display = 'none';
+    okBtn.removeEventListener('click', okHandler);
+    cancelBtn.removeEventListener('click', cancelHandler);
+  };
+  const okHandler = () => { cleanup(); onOk(); };
+  const cancelHandler = () => { cleanup(); };
+  okBtn.addEventListener('click', okHandler);
+  cancelBtn.addEventListener('click', cancelHandler);
+}
+
+function render() {
+  const sections = sectionMeta.filter(s => !s.removed).sort((a,b)=>a.nr-b.nr);
+  const activeSectionNrs = sections.map(s => s.nr);
+
+  const container = document.getElementById('sections');
+  container.innerHTML = '';
+  sections.forEach(sec => {
+    const items = photos.filter(p => p.section === sec.nr && !p.removed);
+
+    const block = document.createElement('div');
+    block.className = 'section-block';
+
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.innerHTML = `<span class="sec-num">${sec.nr}.</span>`;
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.value = sec.title;
+    titleInput.addEventListener('input', (e) => {
+      sec.title = e.target.value;
+      photos.forEach(p => { if (p.section === sec.nr) p.sectionTitle = e.target.value; });
+    });
+    header.appendChild(titleInput);
+
+    const delSecBtn = document.createElement('button');
+    delSecBtn.textContent = '🗑 Kapitel entfernen';
+    delSecBtn.addEventListener('click', () => removeSection(sec.nr));
+    header.appendChild(delSecBtn);
+
+    block.appendChild(header);
+
+    // Drop-Ziel auf dem ganzen Kapitel-Block: sowohl bestehende Karten verschieben
+    // als auch neue Dateien direkt vom Computer in dieses Kapitel ziehen
+    block.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      block.classList.add('drag-over-section');
+    });
+    block.addEventListener('dragleave', (e) => {
+      if (!block.contains(e.relatedTarget)) block.classList.remove('drag-over-section');
+    });
+    block.addEventListener('drop', (e) => {
+      e.preventDefault();
+      block.classList.remove('drag-over-section');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFiles(e.dataTransfer.files, sec.nr);
+        return;
+      }
+      if (draggedId !== null) {
+        const dragged = photos.find(p => p.id === draggedId);
+        if (dragged) {
+          dragged.section = sec.nr;
+          draggedId = null;
+          render();
+        }
+      }
+    });
+
+    if (items.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'Noch keine Bilder in diesem Kapitel — Bild aus anderem Kapitel hierher ziehen oder neue Fotos oben hochladen und per Dropdown zuordnen.';
+      block.appendChild(hint);
+      container.appendChild(block);
+      return;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    items.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'card' + (p.removed ? ' removed' : '') + (p.isNew ? ' new-card' : '');
+      card.draggable = true;
+      card.dataset.id = p.id;
+
+      card.addEventListener('dragstart', (e) => {
+        draggedId = p.id;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        document.querySelectorAll('.card.drag-over').forEach(c => c.classList.remove('drag-over'));
+      });
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (draggedId !== p.id) card.classList.add('drag-over');
+      });
+      card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+      card.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.remove('drag-over');
+        if (draggedId === null || draggedId === p.id) return;
+        movePhoto(draggedId, p.id);
+        draggedId = null;
+        render();
+      });
+
+      const handle = document.createElement('div');
+      handle.className = 'drag-handle';
+      handle.textContent = '⠿ ziehen zum Verschieben';
+      card.appendChild(handle);
+
+      const img = document.createElement('img');
+      img.src = p.thumb;
+      card.appendChild(img);
+
+      const body = document.createElement('div');
+      body.className = 'body';
+      body.innerHTML = `<div class="bildlabel">${p.bild}${p.isNew ? ' <span class="badge">neu</span>' : ''}</div>`;
+      const ta = document.createElement('textarea');
+      ta.value = p.caption;
+      ta.addEventListener('input', (e) => { p.caption = e.target.value; });
+      body.appendChild(ta);
+      card.appendChild(body);
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const select = document.createElement('select');
+      activeSectionNrs.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n; opt.textContent = 'Kap. ' + n;
+        if (n === p.section) opt.selected = true;
+        select.appendChild(opt);
+      });
+      const newOpt = document.createElement('option');
+      newOpt.value = '__new__';
+      newOpt.textContent = '+ Neues Kapitel';
+      select.appendChild(newOpt);
+      select.addEventListener('change', (e) => {
+        if (e.target.value === '__new__') {
+          const nr = nextSectionNr();
+          sectionMeta.push({ nr, title: 'Neues Kapitel', removed:false });
+          p.section = nr;
+        } else {
+          p.section = parseInt(e.target.value);
+        }
+        render();
+      });
+      actions.appendChild(select);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'icon-btn' + (p.removed ? ' restore' : '');
+      delBtn.textContent = p.removed ? '↺ Zurück' : '✖ Entfernen';
+      delBtn.addEventListener('click', () => { p.removed = !p.removed; render(); });
+      actions.appendChild(delBtn);
+
+      card.appendChild(actions);
+      grid.appendChild(card);
+    });
+    block.appendChild(grid);
+    container.appendChild(block);
+  });
+
+  document.getElementById('countLabel').textContent =
+    photos.filter(p=>!p.removed).length + ' von ' + photos.length + ' Bildern aktiv';
+  scheduleSave();
+}
+
+function fileToScaledDataURL(file, maxDim = 1400, quality = 0.82) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        try { resolve(canvas.toDataURL('image/jpeg', quality)); }
+        catch (err) { resolve(e.target.result); }
+      };
+      img.onerror = () => resolve(e.target.result);
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function handleFiles(files, targetSectionNr) {
+  let targetSection = targetSectionNr;
+  let needsNewSection = false;
+  if (!targetSection) {
+    targetSection = sectionMeta.length ? Math.max(...sectionMeta.map(s=>s.nr)) + 1 : 1;
+    needsNewSection = true;
+  }
+  let created = false;
+  const targetTitle = (sectionMeta.find(s => s.nr === targetSection) || {}).title || 'Neue Fotos';
+  Array.from(files).forEach((file) => {
+    if (!file.type || !file.type.startsWith('image/')) return;
+    fileToScaledDataURL(file).then((dataUrl) => {
+      if (needsNewSection && !created) {
+        sectionMeta.push({ nr: targetSection, title: 'Neue Fotos', removed:false });
+        created = true;
+      }
+      photos.push({
+        id: nextId++, section: targetSection,
+        sectionTitle: needsNewSection ? 'Neue Fotos' : targetTitle,
+        bild: 'Neu', caption: file.name.replace(/\.[^.]+$/, ''),
+        thumb: dataUrl, removed:false, isNew:true, origFileName: file.name
+      });
+      render();
+    });
+  });
+}
+
+function exportJson() {
+  const active = photos.filter(p => !p.removed);
+  const bySection = {};
+  active.forEach(p => {
+    if (!bySection[p.section]) bySection[p.section] = { nr: p.section, title: p.sectionTitle, items: [] };
+    bySection[p.section].items.push({
+      bild: p.bild, caption: p.caption, isNew: !!p.isNew,
+      filename: p.isNew ? (p.origFileName || null) : null
+    });
+  });
+  return JSON.stringify(Object.values(bySection).sort((a,b)=>a.nr-b.nr), null, 2);
+}
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+
+document.getElementById('addSectionBtn').addEventListener('click', addSection);
+document.getElementById('exportBtn').addEventListener('click', () => {
+  document.getElementById('exportBox').value = exportJson();
+  document.getElementById('modalBg').style.display = 'flex';
+});
+document.getElementById('closeModalBtn').addEventListener('click', () => {
+  document.getElementById('modalBg').style.display = 'none';
+});
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const box = document.getElementById('exportBox');
+  box.select();
+  box.setSelectionRange(0, 999999);
+  let copied = false;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(box.value).then(() => {
+      document.getElementById('copyBtn').textContent = '✓ Kopiert';
+    }).catch(() => { fallbackCopy(); });
+  } else {
+    fallbackCopy();
+  }
+  function fallbackCopy() {
+    try {
+      document.execCommand('copy');
+      document.getElementById('copyBtn').textContent = '✓ Kopiert';
+    } catch (err) {
+      document.getElementById('copyBtn').textContent = 'Text markiert – Strg+C drücken';
+    }
+  }
+  setTimeout(() => { document.getElementById('copyBtn').textContent = '📋 In Zwischenablage kopieren'; }, 2000);
+});
+document.getElementById('modalBg').addEventListener('click', (e) => {
+  if (e.target.id === 'modalBg') document.getElementById('modalBg').style.display = 'none';
+});
+
+/* ---------- Persistenz: Zustand serverseitig speichern & laden ---------- */
+function authHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  const pw = localStorage.getItem('appPassword');
+  if (pw) h['x-app-password'] = pw;
+  return h;
+}
+
+function setSaveStatus(text, cls) {
+  const el = document.getElementById('saveStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'save-status' + (cls ? ' ' + cls : '');
+}
+
+let saveTimer = null;
+function scheduleSave() {
+  if (!booted) return;
+  setSaveStatus('Änderungen…', 'pending');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 900);
+}
+
+let saveInFlight = false, saveQueued = false;
+async function saveNow() {
+  if (!booted) return;
+  if (saveInFlight) { saveQueued = true; return; }
+  saveInFlight = true;
+  setSaveStatus('Speichern…', 'pending');
+  try {
+    const res = await fetch('/api/state', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ photos, sectionMeta, nextId })
+    });
+    if (res.status === 401) { showLogin(); setSaveStatus('Anmeldung nötig', 'error'); return; }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    setSaveStatus('✓ Gespeichert ' + new Date().toLocaleTimeString('de-DE'), 'ok');
+  } catch (e) {
+    setSaveStatus('⚠ Nicht gespeichert – erneut versuchen', 'error');
+  } finally {
+    saveInFlight = false;
+    if (saveQueued) { saveQueued = false; saveNow(); }
+  }
+}
+
+function showLogin() {
+  let bg = document.getElementById('loginBg');
+  if (!bg) {
+    bg = document.createElement('div');
+    bg.id = 'loginBg';
+    bg.className = 'modal-bg';
+    bg.style.display = 'flex';
+    bg.innerHTML = '<div class="modal" style="max-width:360px;">' +
+      '<h2 style="margin-top:0;">Passwort</h2>' +
+      '<p class="sub">Diese Fotodokumentation ist geschützt.</p>' +
+      '<input id="loginPw" type="password" placeholder="Passwort" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; font:inherit;">' +
+      '<div id="loginErr" style="color:var(--danger); font-size:12px; min-height:16px; margin-top:6px;"></div>' +
+      '<div style="margin-top:10px; display:flex; justify-content:flex-end;">' +
+      '<button class="primary" id="loginBtn">Anmelden</button></div></div>';
+    document.body.appendChild(bg);
+    const submit = () => {
+      const pw = document.getElementById('loginPw').value;
+      localStorage.setItem('appPassword', pw);
+      bg.style.display = 'none';
+      boot();
+    };
+    document.getElementById('loginBtn').addEventListener('click', submit);
+    document.getElementById('loginPw').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  }
+  bg.style.display = 'flex';
+  const inp = document.getElementById('loginPw');
+  if (inp) inp.focus();
+}
+
+function ensureSaveStatusUI() {
+  if (document.getElementById('saveStatus')) return;
+  const toolbar = document.querySelector('.toolbar');
+  const el = document.createElement('span');
+  el.id = 'saveStatus';
+  el.className = 'save-status';
+  el.style.cssText = 'font-size:12px; margin-left:12px; color:var(--muted);';
+  const count = document.querySelector('.count');
+  if (count && count.parentNode) count.parentNode.insertBefore(el, count);
+  else if (toolbar) toolbar.appendChild(el);
+}
+
+async function boot() {
+  ensureSaveStatusUI();
+  try {
+    const res = await fetch('/api/state', { headers: authHeaders() });
+    if (res.status === 401) { showLogin(); return; }
+    const data = await res.json();
+    photos = Array.isArray(data.photos) ? data.photos : [];
+    sectionMeta = Array.isArray(data.sectionMeta) ? data.sectionMeta : [];
+    nextId = data.nextId || (photos.length ? Math.max(...photos.map(p=>p.id)) + 1 : 1);
+    booted = true;
+    render();
+    setSaveStatus('✓ Geladen', 'ok');
+    // Auto-Speichern bei Text-Eingaben (Beschriftungen, Kapiteltitel)
+    document.getElementById('sections').addEventListener('input', scheduleSave);
+  } catch (e) {
+    setSaveStatus('⚠ Laden fehlgeschlagen', 'error');
+    console.error(e);
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

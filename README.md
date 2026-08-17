@@ -1,0 +1,63 @@
+# Fotodokumentation – Bildauswahl
+
+Kleine Web-App zum Sortieren, Beschriften und Kapiteln-Zuordnen von Fotos für
+eine Fotodokumentation. Der Bearbeitungsstand wird **automatisch serverseitig
+gespeichert** und ist von jedem Gerät über die Deploy-URL erreichbar.
+
+## Funktionen
+
+- Fotos per Drag & Drop sortieren und zwischen Kapiteln verschieben
+- Beschriftungen und Kapiteltitel bearbeiten
+- Kapitel hinzufügen/entfernen, Bilder entfernen/wiederherstellen
+- Neue Fotos hochladen (werden automatisch verkleinert, damit der Stand klein bleibt)
+- **Auto-Speichern**: Jede Änderung wird nach kurzer Zeit automatisch gespeichert
+  (Status oben rechts: „Speichern…“ / „✓ Gespeichert“)
+- JSON-Export wie gehabt
+- Optionaler Passwortschutz
+
+## Wie der Stand gespeichert wird
+
+Der Server legt den kompletten Stand in `state.json` ab. Auf Railway liegt diese
+Datei auf einem **Volume**, damit sie Neustarts und neue Deployments übersteht.
+Beim allerersten Start wird der Stand aus `data/seed.json` (den mitgelieferten
+43 Fotos) aufgebaut.
+
+## Lokal starten
+
+```bash
+npm install
+npm start
+# http://localhost:3000
+```
+
+Optional mit Passwort:
+
+```bash
+APP_PASSWORD=meinpasswort npm start
+```
+
+## Deployment auf Railway
+
+1. Auf [railway.app](https://railway.app) einloggen → **New Project** →
+   **Deploy from GitHub repo** → dieses Repository und den Branch auswählen.
+2. Railway erkennt Node.js automatisch und startet mit `npm start`.
+3. **Volume anlegen** (wichtig, sonst geht der Stand bei jedem Deploy verloren):
+   Im Service → **Variables/Settings** → **+ Volume** → Mount-Pfad z. B.
+   `/data`.
+4. **Environment-Variable setzen:** `DATA_DIR = /data` (gleicher Pfad wie das
+   Volume). Alternativ nutzt der Server automatisch `RAILWAY_VOLUME_MOUNT_PATH`,
+   falls gesetzt.
+5. Optional: `APP_PASSWORD = deinPasswort` setzen, um die App zu schützen.
+6. Unter **Settings → Networking → Generate Domain** eine öffentliche URL
+   erzeugen. Diese URL ist dann dauerhaft erreichbar.
+
+Der Port wird von Railway über die `PORT`-Variable vorgegeben – der Server
+übernimmt sie automatisch.
+
+## Umgebungsvariablen
+
+| Variable       | Zweck                                              | Standard        |
+|----------------|----------------------------------------------------|-----------------|
+| `PORT`         | Port (von Railway gesetzt)                          | `3000`          |
+| `DATA_DIR`     | Verzeichnis für `state.json` (auf das Volume legen) | `./data`        |
+| `APP_PASSWORD` | Passwortschutz aktivieren (leer = kein Schutz)      | _leer_          |
