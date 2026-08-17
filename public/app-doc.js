@@ -66,6 +66,65 @@
     return panel;
   };
 
+  // ---- In-App-Dialoge (native prompt/confirm/alert sind in der Vorschau gesperrt)
+  function makeModal(message, withInput, defaultValue, okLabel, danger) {
+    return new Promise(function (resolve) {
+      var bg = document.createElement('div');
+      bg.className = 'modal-bg';
+      bg.style.display = 'flex';
+      var box = document.createElement('div');
+      box.className = 'modal';
+      box.style.maxWidth = '420px';
+      var h = document.createElement('h2');
+      h.style.marginTop = '0';
+      h.textContent = message;
+      box.appendChild(h);
+
+      var input = null;
+      if (withInput) {
+        input = document.createElement('input');
+        input.type = 'text';
+        input.value = defaultValue || '';
+        input.style.cssText = 'width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; font:inherit;';
+        box.appendChild(input);
+      }
+
+      var row = document.createElement('div');
+      row.style.cssText = 'margin-top:14px; display:flex; gap:8px; justify-content:flex-end;';
+      var cancel = document.createElement('button');
+      cancel.textContent = 'Abbrechen';
+      var ok = document.createElement('button');
+      ok.className = 'primary';
+      ok.textContent = okLabel || 'OK';
+      if (danger) { ok.style.background = 'var(--danger)'; ok.style.borderColor = 'var(--danger)'; }
+
+      function done(v) { bg.remove(); document.removeEventListener('keydown', onKey); resolve(v); }
+      function onKey(e) {
+        if (e.key === 'Escape') done(withInput ? null : false);
+        else if (e.key === 'Enter') done(withInput ? (input ? input.value : '') : true);
+      }
+      cancel.addEventListener('click', function () { done(withInput ? null : false); });
+      ok.addEventListener('click', function () { done(withInput ? (input ? input.value : '') : true); });
+      bg.addEventListener('click', function (e) { if (e.target === bg) done(withInput ? null : false); });
+      document.addEventListener('keydown', onKey);
+
+      // Nur Abbrechen anzeigen, wenn es etwas abzubrechen gibt.
+      if (okLabel === 'nur-ok') { ok.textContent = 'OK'; } else { row.appendChild(cancel); }
+      row.appendChild(ok);
+      box.appendChild(row);
+      bg.appendChild(box);
+      document.body.appendChild(bg);
+      if (input) setTimeout(function () { input.focus(); input.select(); }, 30);
+      else setTimeout(function () { ok.focus(); }, 30);
+    });
+  }
+  // Gibt eingegebenen Text oder null (Abbruch) zurück.
+  window.uiPrompt = function (message, defaultValue) { return makeModal(message, true, defaultValue, 'OK', false); };
+  // Gibt true/false zurück.
+  window.uiConfirm = function (message, danger) { return makeModal(message, false, null, 'Ja', danger !== false); };
+  // Nur Hinweis mit OK.
+  window.uiAlert = function (message) { return makeModal(message, false, null, 'nur-ok', false); };
+
   // ---- Projekt-Leiste ------------------------------------------------------
   // state: { projects:[{id,name}], activeId }
   // handlers: { onSwitch(id), onNew(), onRename(), onDelete() }

@@ -497,7 +497,7 @@ async function switchProject(id){
   setSaveStatus('✓ Projekt geladen','ok');
 }
 async function newProject(){
-  const name = prompt('Name des neuen Projekts:','Neues Projekt'); if(name===null) return;
+  const name = await window.uiPrompt('Name des neuen Projekts:','Neues Projekt'); if(name===null) return;
   await saveNow();
   const carryFirma = meta.firma||(window.META_DEFAULTS||{}).firma||''; const carryAuthor = meta.aufgenommenDurch||'';
   const res = await fetch('/api/projects',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({name:name||'Neues Projekt'})});
@@ -512,13 +512,13 @@ async function newProject(){
 }
 async function renameProject(){
   const p = projectIndex.projects.find(x=>x.id===activeId);
-  const name = prompt('Projekt umbenennen:', p?p.name:''); if(name===null) return;
+  const name = await window.uiPrompt('Projekt umbenennen:', p?p.name:''); if(name===null) return;
   if(p){ p.name=name||p.name; await renameOnServer(activeId,p.name); refreshProjectBar(); }
 }
 async function deleteProject(){
-  if(projectIndex.projects.length<=1){ alert('Das letzte Projekt kann nicht gelöscht werden. Lege zuerst ein neues an.'); return; }
+  if(projectIndex.projects.length<=1){ await window.uiAlert('Das letzte Projekt kann nicht gelöscht werden. Lege zuerst ein neues an.'); return; }
   const p = projectIndex.projects.find(x=>x.id===activeId);
-  if(!confirm('Projekt "'+(p?p.name:'')+'" mit allen Fotos unwiderruflich löschen?')) return;
+  if(!(await window.uiConfirm('Projekt „'+(p?p.name:'')+'“ mit allen Fotos unwiderruflich löschen?'))) return;
   const res = await fetch('/api/projects/'+encodeURIComponent(activeId),{method:'DELETE',headers:authHeaders()});
   if(res.status===401){ showLogin(); return; }
   const data = await res.json(); projectIndex = data.index; activeId = projectIndex.activeId;
@@ -534,7 +534,7 @@ async function exportPdf(){
     const blob = await window.generateFotoPdf(meta, photos, sectionMeta);
     const result = await window.deliverPdf(blob, window.pdfFilename(meta));
     btn.textContent = (result==='downloaded'||result==='saved') ? '✓ PDF erstellt' : (result==='declined') ? label : '✓ PDF geöffnet';
-  } catch(e){ console.error(e); alert('PDF-Export fehlgeschlagen: '+((e&&(e.message||e.code))||e)); btn.textContent='⚠ Fehler'; }
+  } catch(e){ console.error(e); window.uiAlert('PDF-Export fehlgeschlagen: '+((e&&(e.message||e.code))||e)); btn.textContent='⚠ Fehler'; }
   finally { btn.disabled=false; setTimeout(()=>{ btn.textContent=label; }, 2500); }
 }
 
