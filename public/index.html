@@ -105,9 +105,8 @@
 let photos = [];
 let sectionMeta = [];
 let nextId = 1;
-let draggedId = null;
-let booted = false;
 let meta = {};
+let draggedId = null;
 
 function nextSectionNr() {
   return sectionMeta.length ? Math.max(...sectionMeta.map(s => s.nr)) + 1 : 1;
@@ -340,8 +339,7 @@ function fileToScaledDataURL(file, maxDim = 1400, quality = 0.82) {
         }
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
         try { resolve(canvas.toDataURL('image/jpeg', quality)); }
         catch (err) { resolve(e.target.result); }
       };
@@ -371,7 +369,7 @@ function handleFiles(files, targetSectionNr) {
       photos.push({
         id: nextId++, section: targetSection,
         sectionTitle: needsNewSection ? 'Neue Fotos' : targetTitle,
-        bild: 'Neu', caption: file.name.replace(/\.[^.]+$/, ''),
+        bild: 'Neu', caption: file.name.replace(/.[^.]+$/, ''),
         thumb: dataUrl, removed:false, isNew:true, origFileName: file.name
       });
       render();
@@ -437,137 +435,142 @@ document.getElementById('modalBg').addEventListener('click', (e) => {
   if (e.target.id === 'modalBg') document.getElementById('modalBg').style.display = 'none';
 });
 
-/* ---------- Persistenz: Zustand serverseitig speichern & laden ---------- */
-function authHeaders(extra) {
-  const h = Object.assign({}, extra || {});
-  const pw = localStorage.getItem('appPassword');
-  if (pw) h['x-app-password'] = pw;
-  return h;
-}
+/* ============= Projekte + serverseitiges Speichern ============= */
+let projectIndex = null, activeId = null, saveTimer = null, booted = false;
 
-function setSaveStatus(text, cls) {
-  const el = document.getElementById('saveStatus');
-  if (!el) return;
-  el.textContent = text;
-  el.className = 'save-status' + (cls ? ' ' + cls : '');
-}
+function authHeaders(extra){ const h=Object.assign({}, extra||{}); const pw=localStorage.getItem('appPassword'); if(pw) h['x-app-password']=pw; return h; }
+function currentState(){ return { photos, sectionMeta, nextId, meta }; }
 
-let saveTimer = null;
-function scheduleSave() {
-  if (!booted) return;
-  setSaveStatus('Änderungen…', 'pending');
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveNow, 900);
-}
+function setSaveStatus(text, cls){ const el=document.getElementById('saveStatus'); if(!el)return; el.textContent=text; el.className='save-status'+(cls?' '+cls:''); }
+function ensureSaveStatusUI(){ if(document.getElementById('saveStatus'))return; const el=document.createElement('span'); el.id='saveStatus'; el.className='save-status'; el.style.cssText='font-size:12px; margin-left:12px; color:var(--muted);'; const c=document.querySelector('.count'); if(c&&c.parentNode)c.parentNode.insertBefore(el,c); }
 
-let saveInFlight = false, saveQueued = false;
-async function saveNow() {
-  if (!booted) return;
-  if (saveInFlight) { saveQueued = true; return; }
-  saveInFlight = true;
-  setSaveStatus('Speichern…', 'pending');
-  try {
-    const res = await fetch('/api/state', {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ photos, sectionMeta, nextId, meta })
-    });
-    if (res.status === 401) { showLogin(); setSaveStatus('Anmeldung nötig', 'error'); return; }
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    setSaveStatus('✓ Gespeichert ' + new Date().toLocaleTimeString('de-DE'), 'ok');
-  } catch (e) {
-    setSaveStatus('⚠ Nicht gespeichert – erneut versuchen', 'error');
-  } finally {
-    saveInFlight = false;
-    if (saveQueued) { saveQueued = false; saveNow(); }
+function applyState(s){
+  if (s && Array.isArray(s.photos) && Array.isArray(s.sectionMeta)) {
+    photos = s.photos; sectionMeta = s.sectionMeta;
+    nextId = s.nextId || (photos.length ? Math.max(...photos.map(p=>p.id)) + 1 : 1);
+    meta = Object.assign({}, (window.META_DEFAULTS||{}), s.meta || {});
+  } else {
+    photos = []; sectionMeta = []; nextId = 1;
+    meta = Object.assign({}, (window.META_DEFAULTS||{}), (s && s.meta) || {});
   }
+}
+
+function scheduleSave(){ if(!booted) return; setSaveStatus('Änderungen…','pending'); clearTimeout(saveTimer); saveTimer=setTimeout(saveNow,900); }
+let saveInFlight=false, saveQueued=false;
+async function saveNow(){
+  if(!booted || !activeId) return;
+  if(saveInFlight){ saveQueued=true; return; }
+  saveInFlight=true; setSaveStatus('Speichern…','pending');
+  try{
+    const res = await fetch('/api/state/'+encodeURIComponent(activeId), { method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body: JSON.stringify(currentState()) });
+    if(res.status===401){ showLogin(); setSaveStatus('Anmeldung nötig','error'); return; }
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const p = projectIndex.projects.find(x=>x.id===activeId);
+    if(p && meta.projektTitel && p.name!==meta.projektTitel){ p.name=meta.projektTitel; renameOnServer(activeId,p.name); refreshProjectBar(); }
+    setSaveStatus('✓ Gespeichert '+new Date().toLocaleTimeString('de-DE'),'ok');
+  }catch(e){ setSaveStatus('⚠ Nicht gespeichert – erneut versuchen','error'); }
+  finally{ saveInFlight=false; if(saveQueued){ saveQueued=false; saveNow(); } }
+}
+async function renameOnServer(id,name){ try{ await fetch('/api/projects/'+encodeURIComponent(id),{method:'PUT',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({name})}); }catch(e){} }
+async function loadProjectState(id){ const res = await fetch('/api/state/'+encodeURIComponent(id), { headers:authHeaders() }); if(res.status===401){ showLogin(); throw new Error('unauth'); } return await res.json(); }
+
+function refreshMetaPanel(){
+  const panel = window.buildMetaPanel(meta, scheduleSave);
+  const old = document.getElementById('metaPanel');
+  if (old) old.replaceWith(panel);
+  else document.getElementById('root').insertBefore(panel, document.getElementById('sections'));
+}
+function refreshProjectBar(){
+  const bar = window.buildProjectBar({ projects: projectIndex.projects, activeId: activeId }, { onSwitch: switchProject, onNew: newProject, onRename: renameProject, onDelete: deleteProject });
+  const old = document.getElementById('projectBar');
+  if (old) old.replaceWith(bar);
+  else document.getElementById('root').insertBefore(bar, document.querySelector('.toolbar'));
+}
+
+async function switchProject(id){
+  if(id===activeId) return;
+  await saveNow();
+  activeId=id; projectIndex.activeId=id;
+  fetch('/api/active',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({id})}).catch(()=>{});
+  try{ applyState(await loadProjectState(id)); }catch(e){ return; }
+  refreshProjectBar(); refreshMetaPanel(); render();
+  setSaveStatus('✓ Projekt geladen','ok');
+}
+async function newProject(){
+  const name = prompt('Name des neuen Projekts:','Neues Projekt'); if(name===null) return;
+  await saveNow();
+  const carryFirma = meta.firma||(window.META_DEFAULTS||{}).firma||''; const carryAuthor = meta.aufgenommenDurch||'';
+  const res = await fetch('/api/projects',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({name:name||'Neues Projekt'})});
+  if(res.status===401){ showLogin(); return; }
+  const data = await res.json();
+  projectIndex = data.index; activeId = data.id;
+  photos=[]; sectionMeta=[]; nextId=1;
+  meta={ titel:'Fotodokumentation', firma:carryFirma, projektTitel:(name||''), thema:'', datum:'', aufgenommenDurch:carryAuthor };
+  await saveNow();
+  refreshProjectBar(); refreshMetaPanel(); render();
+  setSaveStatus('✓ Projekt angelegt','ok');
+}
+async function renameProject(){
+  const p = projectIndex.projects.find(x=>x.id===activeId);
+  const name = prompt('Projekt umbenennen:', p?p.name:''); if(name===null) return;
+  if(p){ p.name=name||p.name; await renameOnServer(activeId,p.name); refreshProjectBar(); }
+}
+async function deleteProject(){
+  if(projectIndex.projects.length<=1){ alert('Das letzte Projekt kann nicht gelöscht werden. Lege zuerst ein neues an.'); return; }
+  const p = projectIndex.projects.find(x=>x.id===activeId);
+  if(!confirm('Projekt "'+(p?p.name:'')+'" mit allen Fotos unwiderruflich löschen?')) return;
+  const res = await fetch('/api/projects/'+encodeURIComponent(activeId),{method:'DELETE',headers:authHeaders()});
+  if(res.status===401){ showLogin(); return; }
+  const data = await res.json(); projectIndex = data.index; activeId = projectIndex.activeId;
+  try{ applyState(await loadProjectState(activeId)); }catch(e){ return; }
+  refreshProjectBar(); refreshMetaPanel(); render();
+  setSaveStatus('✓ Projekt gelöscht','ok');
+}
+
+async function exportPdf(){
+  const btn = document.getElementById('pdfBtn'); const label = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ PDF wird erstellt…';
+  try {
+    const blob = await window.generateFotoPdf(meta, photos, sectionMeta);
+    const result = await window.deliverPdf(blob, window.pdfFilename(meta));
+    btn.textContent = (result==='downloaded'||result==='saved') ? '✓ PDF erstellt' : (result==='declined') ? label : '✓ PDF geöffnet';
+  } catch(e){ console.error(e); alert('PDF-Export fehlgeschlagen: '+((e&&(e.message||e.code))||e)); btn.textContent='⚠ Fehler'; }
+  finally { btn.disabled=false; setTimeout(()=>{ btn.textContent=label; }, 2500); }
 }
 
 function showLogin() {
   let bg = document.getElementById('loginBg');
   if (!bg) {
-    bg = document.createElement('div');
-    bg.id = 'loginBg';
-    bg.className = 'modal-bg';
-    bg.style.display = 'flex';
-    bg.innerHTML = '<div class="modal" style="max-width:360px;">' +
-      '<h2 style="margin-top:0;">Passwort</h2>' +
-      '<p class="sub">Diese Fotodokumentation ist geschützt.</p>' +
-      '<input id="loginPw" type="password" placeholder="Passwort" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; font:inherit;">' +
-      '<div id="loginErr" style="color:var(--danger); font-size:12px; min-height:16px; margin-top:6px;"></div>' +
-      '<div style="margin-top:10px; display:flex; justify-content:flex-end;">' +
-      '<button class="primary" id="loginBtn">Anmelden</button></div></div>';
+    bg = document.createElement('div'); bg.id='loginBg'; bg.className='modal-bg'; bg.style.display='flex';
+    bg.innerHTML = '<div class="modal" style="max-width:360px;"><h2 style="margin-top:0;">Passwort</h2>'+
+      '<p class="sub">Diese Fotodokumentation ist geschützt.</p>'+
+      '<input id="loginPw" type="password" placeholder="Passwort" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; font:inherit;">'+
+      '<div style="margin-top:10px; display:flex; justify-content:flex-end;"><button class="primary" id="loginBtn">Anmelden</button></div></div>';
     document.body.appendChild(bg);
-    const submit = () => {
-      const pw = document.getElementById('loginPw').value;
-      localStorage.setItem('appPassword', pw);
-      bg.style.display = 'none';
-      boot();
-    };
+    const submit = () => { localStorage.setItem('appPassword', document.getElementById('loginPw').value); bg.style.display='none'; boot(); };
     document.getElementById('loginBtn').addEventListener('click', submit);
-    document.getElementById('loginPw').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    document.getElementById('loginPw').addEventListener('keydown', (e)=>{ if(e.key==='Enter') submit(); });
   }
-  bg.style.display = 'flex';
-  const inp = document.getElementById('loginPw');
-  if (inp) inp.focus();
+  bg.style.display='flex';
+  const inp=document.getElementById('loginPw'); if(inp) inp.focus();
 }
 
-function ensureSaveStatusUI() {
-  if (document.getElementById('saveStatus')) return;
-  const toolbar = document.querySelector('.toolbar');
-  const el = document.createElement('span');
-  el.id = 'saveStatus';
-  el.className = 'save-status';
-  el.style.cssText = 'font-size:12px; margin-left:12px; color:var(--muted);';
-  const count = document.querySelector('.count');
-  if (count && count.parentNode) count.parentNode.insertBefore(el, count);
-  else if (toolbar) toolbar.appendChild(el);
-}
-
-async function boot() {
+async function boot(){
   ensureSaveStatusUI();
-  try {
-    const res = await fetch('/api/state', { headers: authHeaders() });
-    if (res.status === 401) { showLogin(); return; }
-    const data = await res.json();
-    photos = Array.isArray(data.photos) ? data.photos : [];
-    sectionMeta = Array.isArray(data.sectionMeta) ? data.sectionMeta : [];
-    nextId = data.nextId || (photos.length ? Math.max(...photos.map(p=>p.id)) + 1 : 1);
-    meta = Object.assign({}, (window.META_DEFAULTS || {}), data.meta || {});
+  try{
+    const res = await fetch('/api/projects', { headers:authHeaders() });
+    if(res.status===401){ showLogin(); return; }
+    projectIndex = await res.json();
+    activeId = projectIndex.activeId || projectIndex.projects[0].id;
+    if(!projectIndex.projects.find(p=>p.id===activeId)) activeId = projectIndex.projects[0].id;
+    applyState(await loadProjectState(activeId));
     booted = true;
-    if (!document.getElementById('metaPanel')) {
-      document.getElementById('root').insertBefore(window.buildMetaPanel(meta, scheduleSave), document.getElementById('sections'));
-    }
-    render();
-    setSaveStatus('✓ Geladen', 'ok');
-    // Auto-Speichern bei Text-Eingaben (Beschriftungen, Kapiteltitel)
+    refreshProjectBar(); refreshMetaPanel(); render();
     document.getElementById('sections').addEventListener('input', scheduleSave);
-  } catch (e) {
-    setSaveStatus('⚠ Laden fehlgeschlagen', 'error');
-    console.error(e);
-  }
+    document.getElementById('pdfBtn').addEventListener('click', exportPdf);
+    setSaveStatus('✓ Geladen','ok');
+  }catch(e){ setSaveStatus('⚠ Laden fehlgeschlagen','error'); console.error(e); }
 }
-
-async function exportPdf() {
-  const btn = document.getElementById('pdfBtn');
-  const label = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ PDF wird erstellt…';
-  try {
-    const blob = await window.generateFotoPdf(meta, photos, sectionMeta);
-    const result = await window.deliverPdf(blob, window.pdfFilename(meta));
-    btn.textContent = (result === 'downloaded' || result === 'saved') ? '✓ PDF erstellt'
-      : (result === 'declined') ? label : '✓ PDF geöffnet';
-  } catch (e) {
-    console.error(e);
-    alert('PDF-Export fehlgeschlagen: ' + ((e && (e.message || e.code)) || e));
-    btn.textContent = '⚠ Fehler';
-  } finally {
-    btn.disabled = false;
-    setTimeout(() => { btn.textContent = label; }, 2500);
-  }
-}
-document.getElementById('pdfBtn').addEventListener('click', exportPdf);
-
 boot();
 </script>
 </body>

@@ -66,6 +66,47 @@
     return panel;
   };
 
+  // ---- Projekt-Leiste ------------------------------------------------------
+  // state: { projects:[{id,name}], activeId }
+  // handlers: { onSwitch(id), onNew(), onRename(), onDelete() }
+  window.buildProjectBar = function (state, handlers) {
+    var bar = document.createElement('div');
+    bar.className = 'section-block';
+    bar.id = 'projectBar';
+    bar.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:wrap;';
+
+    var label = document.createElement('span');
+    label.textContent = '📁 Projekt:';
+    label.style.cssText = 'font-weight:600;';
+
+    var select = document.createElement('select');
+    select.style.cssText = 'font:inherit; padding:6px 8px; border:1px solid var(--border); border-radius:8px; min-width:220px; flex:1; max-width:460px;';
+    state.projects.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.name || '(ohne Name)';
+      if (p.id === state.activeId) o.selected = true;
+      select.appendChild(o);
+    });
+    select.addEventListener('change', function (e) { handlers.onSwitch(e.target.value); });
+
+    function mkBtn(txt, fn, primary) {
+      var b = document.createElement('button');
+      b.textContent = txt;
+      if (primary) b.className = 'primary';
+      b.style.fontSize = '13px';
+      b.addEventListener('click', fn);
+      return b;
+    }
+
+    bar.appendChild(label);
+    bar.appendChild(select);
+    bar.appendChild(mkBtn('＋ Neues Projekt', handlers.onNew, true));
+    bar.appendChild(mkBtn('✎ Umbenennen', handlers.onRename));
+    bar.appendChild(mkBtn('🗑 Löschen', handlers.onDelete));
+    return bar;
+  };
+
   // ---- Hilfsfunktionen -----------------------------------------------------
   function setStyle(doc, style) {
     if (style === 'B') doc.setFont('helvetica', 'bold');

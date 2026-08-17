@@ -6,6 +6,10 @@ gespeichert** und ist von jedem Gerät über die Deploy-URL erreichbar.
 
 ## Funktionen
 
+- **Mehrere Projekte** nebeneinander verwalten (anlegen, umschalten, umbenennen,
+  löschen). Jedes Projekt hat eigene Fotos, eigenen Dokumentkopf und eigenes PDF.
+  Serverseitig liegt jedes Projekt als eigene JSON-Datei, `index.json` hält die
+  Liste und das zuletzt aktive Projekt.
 - Fotos per Drag & Drop sortieren und zwischen Kapiteln verschieben
 - Beschriftungen und Kapiteltitel bearbeiten
 - Kapitel hinzufügen/entfernen, Bilder entfernen/wiederherstellen
@@ -22,10 +26,11 @@ gespeichert** und ist von jedem Gerät über die Deploy-URL erreichbar.
 
 ## Wie der Stand gespeichert wird
 
-Der Server legt den kompletten Stand in `state.json` ab. Auf Railway liegt diese
-Datei auf einem **Volume**, damit sie Neustarts und neue Deployments übersteht.
-Beim allerersten Start wird der Stand aus `data/seed.json` (den mitgelieferten
-43 Fotos) aufgebaut.
+Der Server legt jedes Projekt als eigene Datei (`proj_<id>.json`) im
+Datenverzeichnis ab; `index.json` hält die Projektliste und das aktive Projekt.
+Auf Railway liegt dieses Verzeichnis auf einem **Volume**, damit alles Neustarts
+und neue Deployments übersteht. Beim allerersten Start wird ein erstes Projekt
+aus `data/seed.json` (den mitgelieferten 43 Fotos) aufgebaut.
 
 ## Lokal starten
 
