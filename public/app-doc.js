@@ -364,29 +364,35 @@
 
   // ---- Auslieferung (umgebungsabhängig) -----------------------------------
   window.deliverPdf = function (blob, filename) {
-    // Installierte/lokale App: direkter Download funktioniert.
-    if (!(window.claude && typeof window.claude.use === 'function')) {
+    var inArtifact = !!(window.claude && typeof window.claude.use === 'function');
+
+    // Installierte/lokale App (kein Capability-Runtime): direkter Download.
+    if (!inArtifact) {
       var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function () { URL.revokeObjectURL(url); }, 6000);
+      try {
+        var a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+      } catch (e) {}
+      setTimeout(function () { URL.revokeObjectURL(url); }, 8000);
       return Promise.resolve('downloaded');
     }
-    // Artifact-Vorschau: Download-Fähigkeit versuchen, sonst eingebettete Ansicht.
+
+    // Artifact-Vorschau: Download-Fähigkeit versuchen, sonst eingebettete Ansicht
+    // mit „In neuem Tab öffnen" (dort steht der echte Download des PDF-Viewers).
     return window.claude.use('downloads').then(function (downloads) {
-      if (!downloads) { showPdfPreview(blob, filename); return 'preview'; }
+      if (!downloads) { showPdfPreview(blob, filename, null); return 'preview'; }
       return downloads.save({ filename: filename, data: blob })
         .then(function () { return 'saved'; })
         .catch(function (e) {
           if (e && e.code === 'declined') return 'declined';
-          showPdfPreview(blob, filename);
+          showPdfPreview(blob, filename, downloads);
           return 'preview';
         });
-    }).catch(function () { showPdfPreview(blob, filename); return 'preview'; });
+    }).catch(function () { showPdfPreview(blob, filename, null); return 'preview'; });
   };
 
-  function showPdfPreview(blob, filename) {
+  function showPdfPreview(blob, filename, downloads) {
     var url = URL.createObjectURL(blob);
     var bg = document.createElement('div');
     bg.className = 'modal-bg';
@@ -394,27 +400,41 @@
     var box = document.createElement('div');
     box.className = 'modal';
     box.style.cssText = 'max-width:900px; width:94vw; height:90vh; display:flex; flex-direction:column;';
-    box.innerHTML =
-      '<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">' +
-      '<h2 style="margin:0; flex:1;">PDF-Vorschau</h2>' +
-      '<button id="pdfPreviewOpen">In neuem Tab öffnen</button>' +
-      '<button id="pdfPreviewClose">Schliessen</button></div>' +
-      '<p class="sub" style="margin:0 0 8px;">In der Vorschau ist kein direkter Datei-Download möglich. ' +
-      'Zum Speichern das Download-/Drucksymbol in der PDF-Ansicht unten nutzen oder „In neuem Tab öffnen". ' +
-      'In der installierten App wird die Datei direkt gespeichert.</p>';
+
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;';
+    var h = document.createElement('h2');
+    h.style.cssText = 'margin:0; flex:1; font-size:17px;';
+    h.textContent = 'PDF – ' + filename;
+    var openBtn = document.createElement('button');
+    openBtn.className = 'primary';
+    openBtn.textContent = '⬇ In neuem Tab öffnen / speichern';
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Schliessen';
+    bar.appendChild(h); bar.appendChild(openBtn); bar.appendChild(closeBtn);
+    box.appendChild(bar);
+
+    var note = document.createElement('p');
+    note.className = 'sub';
+    note.style.cssText = 'margin:0 0 8px;';
+    note.textContent = 'Tipp: „In neuem Tab öffnen / speichern" – dort mit dem Download-Symbol des PDF-Viewers als Datei sichern. In der installierten App wird direkt gespeichert.';
+    box.appendChild(note);
+
     var frame = document.createElement('iframe');
     frame.src = url;
     frame.style.cssText = 'flex:1; width:100%; border:1px solid var(--border); border-radius:8px; background:#fff;';
     box.appendChild(frame);
+
     bg.appendChild(box);
     document.body.appendChild(bg);
-    function close() {
-      bg.remove();
-      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    }
-    box.querySelector('#pdfPreviewClose').addEventListener('click', close);
-    var openBtn = box.querySelector('#pdfPreviewOpen');
-    if (openBtn) openBtn.addEventListener('click', function () { window.open(url, '_blank'); });
+
+    function close() { bg.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1500); }
+    closeBtn.addEventListener('click', close);
     bg.addEventListener('click', function (e) { if (e.target === bg) close(); });
+    openBtn.addEventListener('click', function () {
+      var w = null;
+      try { w = window.open(url, '_blank'); } catch (e) {}
+      if (!w && downloads) { downloads.save({ filename: filename, data: blob }).catch(function () {}); }
+    });
   }
 })();
