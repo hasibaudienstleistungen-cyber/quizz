@@ -429,18 +429,26 @@
       p2.textContent = 'Öffnet das PDF in einem neuen Tab – dort mit dem Download-Symbol des PDF-Viewers als Datei speichern oder drucken.';
       box.appendChild(p2);
 
+      var base = filename.replace(/\.pdf$/i, '');
+      var htmlDoc =
+        '<!doctype html><html><head><meta charset="utf-8"><title>' + filename + '</title>' +
+        '<style>html,body{margin:0;height:100%}embed{border:0;width:100%;height:100%}</style></head>' +
+        '<body><embed type="application/pdf" src="' + dataUri + '"></body></html>';
+
       var row = document.createElement('div');
       row.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;';
+      var saveBtn = document.createElement('button');
+      saveBtn.className = 'primary';
+      saveBtn.textContent = '💾 Als Datei speichern';
       var openBtn = document.createElement('button');
-      openBtn.className = 'primary';
-      openBtn.textContent = '⬇ PDF in neuem Tab öffnen';
+      openBtn.textContent = 'In neuem Tab öffnen';
       var closeBtn = document.createElement('button');
       closeBtn.textContent = 'Schliessen';
-      row.appendChild(openBtn); row.appendChild(closeBtn);
+      row.appendChild(saveBtn); row.appendChild(openBtn); row.appendChild(closeBtn);
       box.appendChild(row);
 
       var hint = document.createElement('div');
-      hint.style.cssText = 'color:var(--danger); font-size:12px; margin-top:10px; min-height:16px;';
+      hint.style.cssText = 'color:var(--muted); font-size:12px; margin-top:10px; min-height:16px;';
       box.appendChild(hint);
 
       bg.appendChild(box);
@@ -449,34 +457,47 @@
       closeBtn.addEventListener('click', close);
       bg.addEventListener('click', function (e) { if (e.target === bg) close(); });
 
+      // Datei speichern: erst PDF versuchen, sonst HTML (öffnet das PDF eingebettet).
+      saveBtn.addEventListener('click', function () {
+        if (!downloads) {
+          hint.style.color = 'var(--danger)';
+          hint.textContent = 'Datei-Speichern ist in dieser Vorschau nicht verfügbar. Bitte die installierte App (Railway) nutzen.';
+          return;
+        }
+        hint.style.color = 'var(--muted)';
+        hint.textContent = 'Speichern…';
+        downloads.save({ filename: filename, data: blob }).then(function () {
+          hint.style.color = 'var(--ok)';
+          hint.textContent = '✓ PDF gespeichert.';
+        }).catch(function (e1) {
+          downloads.save({ filename: base + '.html', data: htmlDoc }).then(function () {
+            hint.style.color = 'var(--ok)';
+            hint.textContent = '✓ Als HTML gespeichert – Datei öffnen und über Drucken → „Als PDF speichern“ sichern.';
+          }).catch(function (e2) {
+            hint.style.color = 'var(--danger)';
+            hint.textContent = 'Speichern nicht möglich (PDF: ' + ((e1 && e1.code) || '?') + ', HTML: ' + ((e2 && e2.code) || '?') + '). Bitte die installierte App (Railway) für den direkten PDF-Download nutzen.';
+          });
+        });
+      });
+
+      // Optionaler Versuch über einen echten Tab (in der Vorschau oft gesperrt).
       openBtn.addEventListener('click', function () {
         var win = null;
         try { win = window.open('', '_blank'); } catch (e) {}
         if (win && win.document) {
           try {
             win.document.open();
-            win.document.write(
-              '<!doctype html><html><head><meta charset="utf-8"><title>' + filename + '</title>' +
-              '<style>html,body{margin:0;height:100%}embed,iframe{border:0;width:100%;height:100%}</style></head>' +
-              '<body><embed type="application/pdf" src="' + dataUri + '"></body></html>');
+            win.document.write(htmlDoc);
             win.document.close();
-            hint.textContent = '';
+            hint.style.color = 'var(--ok)';
+            hint.textContent = 'In neuem Tab geöffnet.';
             return;
           } catch (e) {}
         }
-        // Popup blockiert: als HTML-Datei sichern (garantierter Weg), sonst Hinweis.
-        if (downloads) {
-          var htmlDoc =
-            '<!doctype html><html><head><meta charset="utf-8"><title>' + filename + '</title>' +
-            '<style>html,body{margin:0;height:100%}embed{border:0;width:100%;height:100%}</style></head>' +
-            '<body><embed type="application/pdf" src="' + dataUri + '"></body></html>';
-          downloads.save({ filename: filename.replace(/\.pdf$/i, '') + '.html', data: htmlDoc })
-            .then(function () { hint.style.color = 'var(--ok)'; hint.textContent = 'Als HTML-Datei gespeichert – im Browser öffnen und drucken/als PDF sichern.'; })
-            .catch(function () { hint.textContent = 'Popups sind blockiert. Bitte Popups für diese Seite erlauben – oder die installierte App für den direkten PDF-Download nutzen.'; });
-        } else {
-          hint.textContent = 'Popups sind blockiert. Bitte Popups für diese Seite erlauben – oder die installierte App für den direkten PDF-Download nutzen.';
-        }
+        hint.style.color = 'var(--danger)';
+        hint.textContent = 'Neuer Tab ist in dieser Vorschau gesperrt (nicht dein Browser). Bitte „Als Datei speichern“ oben nutzen.';
       });
+
       return 'preview';
     });
   }
