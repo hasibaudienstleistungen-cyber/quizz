@@ -363,7 +363,9 @@
   };
 
   // ---- Auslieferung (umgebungsabhängig) -----------------------------------
-  window.deliverPdf = function (blob, filename) {
+  // stateJson (optional): kompletter Projektzustand als JSON-String – dient in
+  // der Vorschau als garantiert speicherbare Datei (Basistyp .json).
+  window.deliverPdf = function (blob, filename, stateJson) {
     var inArtifact = !!(window.claude && typeof window.claude.use === 'function');
 
     // Installierte/lokale App (kein Capability-Runtime): direkter Download.
@@ -378,127 +380,82 @@
       return Promise.resolve('downloaded');
     }
 
-    // Artifact-Vorschau: erst echten Datei-Download versuchen; wird das Format
-    // abgelehnt, den PDF-Dialog anzeigen (öffnet das PDF in einem echten Tab).
+    // Artifact-Vorschau: PDF-Download versuchen; wird das Format abgelehnt
+    // (in der Vorschau gesperrt), ehrlichen Datendialog zeigen.
     return window.claude.use('downloads').then(function (downloads) {
-      if (!downloads) return openPdfDialog(blob, filename, null);
+      if (!downloads) return dataDialog(filename, stateJson, null);
       return downloads.save({ filename: filename, data: blob })
         .then(function () { return 'saved'; })
         .catch(function (e) {
           if (e && e.code === 'declined') return 'declined';
-          return openPdfDialog(blob, filename, downloads);
+          return dataDialog(filename, stateJson, downloads);
         });
-    }).catch(function () { return openPdfDialog(blob, filename, null); });
+    }).catch(function () { return dataDialog(filename, stateJson, null); });
   };
 
-  function blobToDataURL(blob) {
-    return new Promise(function (resolve) {
-      var r = new FileReader();
-      r.onload = function () { resolve(r.result); };
-      r.onerror = function () { resolve(null); };
-      r.readAsDataURL(blob);
-    });
-  }
+  // Ehrlicher Dialog für die Vorschau: PDF-Download ist hier plattformseitig
+  // gesperrt. Bietet das Sichern der Projektdaten als .json (Basistyp, immer
+  // erlaubt), damit man sie verschicken/sichern kann.
+  function dataDialog(filename, stateJson, downloads) {
+    var base = filename.replace(/\.pdf$/i, '');
+    var bg = document.createElement('div');
+    bg.className = 'modal-bg';
+    bg.style.display = 'flex';
+    var box = document.createElement('div');
+    box.className = 'modal';
+    box.style.cssText = 'max-width:540px;';
 
-  // Öffnet das fertige PDF in einem echten Browser-Tab (dort gibt es die native
-  // Download-/Druck-Funktion). Zusätzlich ein garantierter HTML-Fallback über die
-  // downloads-Fähigkeit, falls Popups blockiert sind.
-  function openPdfDialog(blob, filename, downloads) {
-    return blobToDataURL(blob).then(function (dataUri) {
-      var bg = document.createElement('div');
-      bg.className = 'modal-bg';
-      bg.style.display = 'flex';
-      var box = document.createElement('div');
-      box.className = 'modal';
-      box.style.cssText = 'max-width:520px;';
+    var h = document.createElement('h2');
+    h.style.marginTop = '0';
+    h.textContent = 'PDF-Download nur in der App';
+    box.appendChild(h);
 
-      var h = document.createElement('h2');
-      h.style.marginTop = '0';
-      h.textContent = 'PDF ist fertig';
-      box.appendChild(h);
+    var p = document.createElement('p');
+    p.className = 'sub';
+    p.style.cssText = 'margin:6px 0 14px;';
+    p.innerHTML = 'In dieser Vorschau ist der PDF-Download plattformseitig gesperrt. ' +
+      'Der direkte PDF-Download funktioniert in der installierten App (Railway).<br><br>' +
+      'Du kannst hier deine <b>Projektdaten als Datei sichern</b> und sie mir im Chat schicken – ' +
+      'dann erzeuge ich dir das fertige PDF.';
+    box.appendChild(p);
 
-      var p = document.createElement('p');
-      p.className = 'sub';
-      p.style.cssText = 'margin:0 0 4px;';
-      p.textContent = filename;
-      box.appendChild(p);
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;';
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'primary';
+    saveBtn.textContent = '💾 Projektdaten speichern (.json)';
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Schliessen';
+    row.appendChild(saveBtn); row.appendChild(closeBtn);
+    box.appendChild(row);
 
-      var p2 = document.createElement('p');
-      p2.className = 'sub';
-      p2.style.cssText = 'margin:6px 0 14px;';
-      p2.textContent = 'Öffnet das PDF in einem neuen Tab – dort mit dem Download-Symbol des PDF-Viewers als Datei speichern oder drucken.';
-      box.appendChild(p2);
+    var hint = document.createElement('div');
+    hint.style.cssText = 'color:var(--muted); font-size:12px; margin-top:10px; min-height:16px;';
+    box.appendChild(hint);
 
-      var base = filename.replace(/\.pdf$/i, '');
-      var htmlDoc =
-        '<!doctype html><html><head><meta charset="utf-8"><title>' + filename + '</title>' +
-        '<style>html,body{margin:0;height:100%}embed{border:0;width:100%;height:100%}</style></head>' +
-        '<body><embed type="application/pdf" src="' + dataUri + '"></body></html>';
+    bg.appendChild(box);
+    document.body.appendChild(bg);
+    function close() { bg.remove(); }
+    closeBtn.addEventListener('click', close);
+    bg.addEventListener('click', function (e) { if (e.target === bg) close(); });
 
-      var row = document.createElement('div');
-      row.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;';
-      var saveBtn = document.createElement('button');
-      saveBtn.className = 'primary';
-      saveBtn.textContent = '💾 Als Datei speichern';
-      var openBtn = document.createElement('button');
-      openBtn.textContent = 'In neuem Tab öffnen';
-      var closeBtn = document.createElement('button');
-      closeBtn.textContent = 'Schliessen';
-      row.appendChild(saveBtn); row.appendChild(openBtn); row.appendChild(closeBtn);
-      box.appendChild(row);
-
-      var hint = document.createElement('div');
-      hint.style.cssText = 'color:var(--muted); font-size:12px; margin-top:10px; min-height:16px;';
-      box.appendChild(hint);
-
-      bg.appendChild(box);
-      document.body.appendChild(bg);
-      function close() { bg.remove(); }
-      closeBtn.addEventListener('click', close);
-      bg.addEventListener('click', function (e) { if (e.target === bg) close(); });
-
-      // Datei speichern: erst PDF versuchen, sonst HTML (öffnet das PDF eingebettet).
-      saveBtn.addEventListener('click', function () {
-        if (!downloads) {
-          hint.style.color = 'var(--danger)';
-          hint.textContent = 'Datei-Speichern ist in dieser Vorschau nicht verfügbar. Bitte die installierte App (Railway) nutzen.';
-          return;
-        }
-        hint.style.color = 'var(--muted)';
-        hint.textContent = 'Speichern…';
-        downloads.save({ filename: filename, data: blob }).then(function () {
-          hint.style.color = 'var(--ok)';
-          hint.textContent = '✓ PDF gespeichert.';
-        }).catch(function (e1) {
-          downloads.save({ filename: base + '.html', data: htmlDoc }).then(function () {
-            hint.style.color = 'var(--ok)';
-            hint.textContent = '✓ Als HTML gespeichert – Datei öffnen und über Drucken → „Als PDF speichern“ sichern.';
-          }).catch(function (e2) {
-            hint.style.color = 'var(--danger)';
-            hint.textContent = 'Speichern nicht möglich (PDF: ' + ((e1 && e1.code) || '?') + ', HTML: ' + ((e2 && e2.code) || '?') + '). Bitte die installierte App (Railway) für den direkten PDF-Download nutzen.';
-          });
-        });
-      });
-
-      // Optionaler Versuch über einen echten Tab (in der Vorschau oft gesperrt).
-      openBtn.addEventListener('click', function () {
-        var win = null;
-        try { win = window.open('', '_blank'); } catch (e) {}
-        if (win && win.document) {
-          try {
-            win.document.open();
-            win.document.write(htmlDoc);
-            win.document.close();
-            hint.style.color = 'var(--ok)';
-            hint.textContent = 'In neuem Tab geöffnet.';
-            return;
-          } catch (e) {}
-        }
+    saveBtn.addEventListener('click', function () {
+      if (!downloads || !stateJson) {
         hint.style.color = 'var(--danger)';
-        hint.textContent = 'Neuer Tab ist in dieser Vorschau gesperrt (nicht dein Browser). Bitte „Als Datei speichern“ oben nutzen.';
+        hint.textContent = 'Speichern nicht verfügbar. Bitte oben „JSON-Backup“ nutzen und den Text hier in den Chat einfügen.';
+        return;
+      }
+      hint.style.color = 'var(--muted)';
+      hint.textContent = 'Speichern…';
+      downloads.save({ filename: base + '.json', data: stateJson }).then(function () {
+        hint.style.color = 'var(--ok)';
+        hint.textContent = '✓ Gespeichert. Schick mir diese .json-Datei im Chat – ich erzeuge daraus das PDF.';
+      }).catch(function (e) {
+        hint.style.color = 'var(--danger)';
+        hint.textContent = 'Speichern nicht möglich (' + ((e && e.code) || '?') + '). Bitte oben „JSON-Backup“ nutzen und den Text hier einfügen.';
       });
-
-      return 'preview';
     });
+
+    return 'preview';
   }
 })();

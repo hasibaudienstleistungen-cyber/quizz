@@ -532,7 +532,7 @@ async function exportPdf(){
   btn.disabled = true; btn.textContent = '⏳ PDF wird erstellt…';
   try {
     const blob = await window.generateFotoPdf(meta, photos, sectionMeta);
-    const result = await window.deliverPdf(blob, window.pdfFilename(meta));
+    const result = await window.deliverPdf(blob, window.pdfFilename(meta), JSON.stringify(currentState()));
     btn.textContent = (result==='downloaded'||result==='saved') ? '✓ PDF erstellt' : (result==='declined') ? label : '✓ PDF geöffnet';
   } catch(e){ console.error(e); window.uiAlert('PDF-Export fehlgeschlagen: '+((e&&(e.message||e.code))||e)); btn.textContent='⚠ Fehler'; }
   finally { btn.disabled=false; setTimeout(()=>{ btn.textContent=label; }, 2500); }
