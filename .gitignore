@@ -1,5 +1,8 @@
 node_modules/
 data/state.json
 data/state.json.tmp
+data/index.json
+data/proj_*.json
+data/*.tmp
 *.log
 .DS_Store

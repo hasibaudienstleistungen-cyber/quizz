@@ -325,7 +325,7 @@ function render() {
   scheduleSave();
 }
 
-function fileToScaledDataURL(file, maxDim = 1400, quality = 0.82) {
+function fileToScaledDataURL(file, maxDim = 2200, quality = 0.9) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
